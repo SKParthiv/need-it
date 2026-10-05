@@ -1,25 +1,34 @@
+# Dependencies
 node_modules/
 **/node_modules/
-
-.expo/
-**/.expo/
-
+# Build output
 dist/
 **/dist/
-
 build/
-**/build/
-
-.gradle/
-**/.gradle/
-
-.cxx/
-**/.cxx/
-
-local.properties
-**/local.properties
-
+*.tsbuildinfo
+# Expo / RN
+.expo/
+.expo-shared/
+web-build/
+*.jks *.p8 *.p12 *.key *.mobileprovision *.orig.*
+# Env & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+# OS / editor
+.DS_Store
+Thumbs.db
 .idea/
-**/.idea/
-
-*.log
+.vscode/*
+!.vscode/extensions.json
+# Python / Django
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+db.sqlite3
+staticfiles/
+media/
+# Loose docs
+needit___v1doc.pdf
