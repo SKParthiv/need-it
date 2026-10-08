@@ -6,7 +6,8 @@ class ChatMessage(models.Model):
     request = models.ForeignKey("orders.Request", on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     text = models.TextField(blank=True)
-    photo = models.ImageField(upload_to="chat/", null=True, blank=True)  # -> S3 in prod
+    photo_url = models.URLField(max_length=500, blank=True)
+    is_system_notice = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

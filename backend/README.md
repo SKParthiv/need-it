@@ -18,14 +18,21 @@ The app renders state; only this service decides it.
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # fill in values
+# Copy .env.example to .env and fill in deployment values when needed.
 python manage.py makemigrations users orders payments chat
 python manage.py migrate
 python manage.py test          # proves the escrow invariants
 python manage.py runserver
 ```
+
+When `POSTGRES_HOST` is unset, local development and tests use SQLite. Set it
+in `.env` to use Postgres.
 
 ## Status of each app
 

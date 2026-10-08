@@ -25,3 +25,16 @@ def refund(payment):
     if payment.status in (PaymentStatus.HELD, PaymentStatus.PENDING):
         return get_provider().refund(payment)
     return payment
+
+
+def confirm_payment(payment, user):
+    if user.id == payment.request.customer_id:
+        payment.customer_confirmed = True
+    elif user.id == payment.request.helper_id:
+        payment.helper_confirmed = True
+    else:
+        raise ValueError("Only the customer or assigned helper can confirm payment.")
+    payment.save(update_fields=("customer_confirmed", "helper_confirmed", "updated_at"))
+    if payment.customer_confirmed and payment.helper_confirmed:
+        get_provider().confirm(payment)
+    return payment

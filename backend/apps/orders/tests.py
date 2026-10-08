@@ -17,6 +17,9 @@ class StateMachineTests(TestCase):
     def setUp(self):
         self.cust = User.objects.create_user("cust", password="x")
         self.helper = User.objects.create_user("help", password="x")
+        self.helper.role = "helper"
+        self.helper.is_verified_student = True
+        self.helper.save(update_fields=("role", "is_verified_student"))
         self.req = make_req(self.cust)
 
     def test_two_helpers_cannot_both_accept(self):
@@ -40,7 +43,7 @@ class StateMachineTests(TestCase):
                                idempotency_key="k1", status=PaymentStatus.HELD)
         services.mark_purchased(self.req.id, self.helper)
         services.confirm_handover(self.req.id, self.cust)
-        obj = services.complete(self.req.id)
+        obj = services.confirm_handover(self.req.id, self.helper)
         self.assertEqual(obj.status, OrderStatus.COMPLETED)
 
     def test_release_returns_to_feed(self):
