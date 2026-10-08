@@ -25,14 +25,17 @@ python -m venv .venv
 # source .venv/bin/activate
 pip install -r requirements.txt
 # Copy .env.example to .env and fill in deployment values when needed.
-python manage.py makemigrations users orders payments chat
 python manage.py migrate
-python manage.py test          # proves the escrow invariants
+python manage.py check
+python manage.py test apps.users apps.orders apps.payments apps.chat
 python manage.py runserver
 ```
 
 When `POSTGRES_HOST` is unset, local development and tests use SQLite. Set it
 in `.env` to use Postgres.
+
+For the complete PostgreSQL, Redis/Celery, object storage, Render, and CI/CD
+setup, see [`docs/backend-setup-and-deployment.md`](../docs/backend-setup-and-deployment.md).
 
 ## Status of each app
 
@@ -40,8 +43,8 @@ in `.env` to use Postgres.
 |---|---|
 | `orders` | state machine + guarded transitions — **done, tested** |
 | `payments` | escrow abstraction + manual provider + webhook skeleton — **done, tested** (razorpay = stubs) |
-| `users` | custom user model + roles — model done; register/verify TODO |
-| `chat` | model done; views TODO |
+| `users` | custom user model, registration, verification, and token auth |
+| `chat` | polling messages, URL-only photo references, completed-order read-only mode |
 
 Everything environment-specific is in `.env` (see `.env.example`). No real keys,
 no paid accounts assumed — runs locally on free defaults.
