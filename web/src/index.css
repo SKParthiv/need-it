@@ -1,0 +1,388 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #4F46E5;
+    --color-primary-dark: #3730A3;
+    --color-primary-light: #EEF2FF;
+    --color-accent: #FF6B3D;
+    --color-helper: #0F766E;
+    
+    --color-success: #166534;
+    --color-success-tint: #DCFCE7;
+    --color-warning: #B45309;
+    --color-warning-tint: #FEF3C7;
+    --color-danger: #B91C1C;
+    --color-danger-tint: #FEE2E2;
+    --color-info: #0369A1;
+    --color-info-tint: #E0F2FE;
+    --color-handover: #6D28D9;
+    --color-handover-tint: #EDE9FE;
+    
+    --color-ink: #0B1020;
+    --color-text: #1E293B;
+    --color-secondary: #475569;
+    --color-placeholder: #64748B;
+    --color-disabled: #94A3B8;
+    --color-border: #E2E8F0;
+    --color-surface-alt: #F1F5F9;
+    --color-page-bg: #F8FAFC;
+    --color-card: #FFFFFF;
+  }
+
+  .dark {
+    --color-page-bg: #0B1020;
+    --color-card: #141A2E;
+    --color-border: #27304A;
+    --color-text: #E6EAF5;
+    --color-secondary: #9AA6C4;
+    --color-primary: #818CF8;
+    --color-success: #4ADE80;
+    --color-warning: #FBBF24;
+    --color-danger: #F87171;
+    --color-info: #38BDF8;
+    --color-handover: #A78BFA;
+  }
+
+  body {
+    background-color: var(--color-page-bg);
+    color: var(--color-text);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Accessible focus ring: 2px primary + 2px offset per design system */
+  :focus-visible {
+    outline: 2px solid #4F46E5;
+    outline-offset: 2px;
+  }
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Safe area insets for mobile */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* Section 10: Motion & Tactile Feedback */
+/* 10.4: Button press: scale .97, 100ms */
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]) {
+  transition: transform 100ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+}
+
+/* 10.2: Duration & Easing Tokens */
+.transition-instant { transition-duration: 100ms; }
+.transition-fast { transition-duration: 150ms; }
+.transition-base { transition-duration: 250ms; }
+.transition-slow { transition-duration: 400ms; }
+.transition-hero { transition-duration: 700ms; }
+
+.ease-enter { transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+.ease-exit { transition-timing-function: cubic-bezier(0.4, 0, 1, 1); }
+.ease-standard { transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+
+/* Card hover tactile feedback */
+.card-interactive {
+  transition: transform 250ms cubic-bezier(0.2, 0, 0, 1), box-shadow 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+/* Modals and dialogs (10.4: 400ms enter, 280ms exit) */
+.modal-backdrop-anim {
+  animation: fadeIn 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.modal-content-anim {
+  animation: modalSlideUp 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes modalSlideUp {
+  0% { opacity: 0; transform: translateY(16px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Page change: 250ms fade + 8px slide (10.4) */
+.page-enter {
+  animation: pageSlide 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes pageSlide {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 10.4: Urgent flag: zap icon pulses 2 times then stops */
+@keyframes urgentPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  25% { transform: scale(1.25); opacity: 0.8; }
+  50% { transform: scale(1); opacity: 1; }
+  75% { transform: scale(1.25); opacity: 0.8; }
+}
+.urgent-pulse {
+  animation: urgentPulse 1.2s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+}
+
+/* 10.4: OTP / Handover code digits fade in sequentially (50ms each) */
+@keyframes digitFadeIn {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.digit-fade-0 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 0ms forwards; }
+.digit-fade-1 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 50ms forwards; }
+.digit-fade-2 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 100ms forwards; }
+.digit-fade-3 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 150ms forwards; }
+.digit-fade-4 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 200ms forwards; }
+.digit-fade-5 { animation: digitFadeIn 200ms cubic-bezier(0.22, 1, 0.36, 1) 250ms forwards; }
+
+/* 10.4: Handover success check draws in 500ms + ring pulse */
+@keyframes checkDraw {
+  0% { stroke-dashoffset: 60; }
+  100% { stroke-dashoffset: 0; }
+}
+.check-draw {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: checkDraw 500ms cubic-bezier(0.22, 1, 0.36, 1) 150ms forwards;
+}
+@keyframes ringPulse {
+  0% { transform: scale(0.85); opacity: 0.9; }
+  60% { transform: scale(1.2); opacity: 0.3; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+.ring-pulse {
+  animation: ringPulse 900ms cubic-bezier(0.22, 1, 0.36, 1) 250ms forwards;
+}
+
+/* 10.4: Rating stars scale 1.15 pop on select */
+@keyframes starPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.star-pop {
+  animation: starPop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 10.4: Chat message: scale .96 -> 1 + fade 200ms; typing dots pulse */
+@keyframes chatEnter {
+  0% { opacity: 0; transform: scale(0.96) translateY(6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.chat-msg-enter {
+  animation: chatEnter 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes typingPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.typing-dot-1 { animation: typingPulse 1s infinite 0ms; }
+.typing-dot-2 { animation: typingPulse 1s infinite 200ms; }
+.typing-dot-3 { animation: typingPulse 1s infinite 400ms; }
+
+/* 10.4: Photo in chat: thumbnail blur-up fade */
+@keyframes blurUpFade {
+  0% { filter: blur(8px); opacity: 0.5; transform: scale(0.97); }
+  100% { filter: blur(0); opacity: 1; transform: scale(1); }
+}
+.thumbnail-blur-up {
+  animation: blurUpFade 350ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 10.4: Form errors: message slides down 150ms */
+@keyframes errorSlideDown {
+  0% { opacity: 0; transform: translateY(-8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.error-msg-enter {
+  animation: errorSlideDown 150ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 10.4: Price-change alert & form errors shake horizontally once (6px, 300ms) */
+@keyframes shake6px {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake6px 300ms ease-in-out forwards;
+}
+
+/* 10.4: New request in feed: slides in from top, brief indigo-tint highlight 1.5s */
+@keyframes newRequestSlide {
+  0% { opacity: 0; transform: translateY(-16px); background-color: rgba(79, 70, 229, 0.18); }
+  60% { background-color: rgba(79, 70, 229, 0.12); }
+  100% { opacity: 1; transform: translateY(0); background-color: transparent; }
+}
+.new-request-enter {
+  animation: newRequestSlide 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* 10.4: Accept request lock morph */
+@keyframes lockMorph {
+  0% { transform: scale(0.7) rotate(-12deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.animate-lock-morph {
+  animation: lockMorph 350ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 10.4: Bottom sheet / Drawer transitions (400ms enter, 280ms exit) */
+@keyframes sheetSlideUp {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+@keyframes sheetSlideRight {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+.sheet-slide-up {
+  animation: sheetSlideUp 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.sheet-slide-right {
+  animation: sheetSlideRight 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Accordion grid smooth transition */
+.accordion-grid {
+  display: grid;
+  transition: grid-template-rows 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+.accordion-grid-open {
+  grid-template-rows: 1fr;
+}
+.accordion-grid-closed {
+  grid-template-rows: 0fr;
+}
+
+/* Stagger delay utilities (10.3) */
+.stagger-1 { animation-delay: 60ms; }
+.stagger-2 { animation-delay: 120ms; }
+.stagger-3 { animation-delay: 180ms; }
+.stagger-4 { animation-delay: 240ms; }
+.stagger-5 { animation-delay: 300ms; }
+.stagger-6 { animation-delay: 360ms; }
+
+/* 10.4: Status change: timeline progress grow 400ms */
+.timeline-line-grow {
+  transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 10.4: Skeleton shimmer left->right 1.5s */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 1.5s infinite;
+  content: '';
+}
+
+/* 10.7: Hero Ambient Background ("Campus in motion") */
+@keyframes glowDrift1 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(35px, -25px) scale(1.1); }
+  100% { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes glowDrift2 {
+  0% { transform: translate(0, 0) scale(1.05); }
+  50% { transform: translate(-30px, 30px) scale(0.95); }
+  100% { transform: translate(25px, -20px) scale(1.1); }
+}
+@keyframes glowDrift3 {
+  0% { transform: translate(0, 0) scale(0.95); }
+  50% { transform: translate(25px, 20px) scale(1.08); }
+  100% { transform: translate(-25px, -15px) scale(1); }
+}
+.hero-glow-1 { animation: glowDrift1 22s ease-in-out infinite alternate; }
+.hero-glow-2 { animation: glowDrift2 26s ease-in-out infinite alternate; }
+.hero-glow-3 { animation: glowDrift3 20s ease-in-out infinite alternate; }
+
+@keyframes floatIcon1 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(4deg); }
+}
+@keyframes floatIcon2 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(12px) rotate(-4deg); }
+}
+.float-icon-1 { animation: floatIcon1 9s ease-in-out infinite; }
+.float-icon-2 { animation: floatIcon2 11s ease-in-out infinite; }
+
+/* Enhanced Moving Hero Animations */
+@keyframes flowDashForward {
+  0% { stroke-dashoffset: 48; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes flowDashReverse {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 48; }
+}
+.route-flow-1 {
+  stroke-dasharray: 6 8;
+  animation: flowDashForward 2.4s linear infinite;
+}
+.route-flow-2 {
+  stroke-dasharray: 8 6;
+  animation: flowDashReverse 3s linear infinite;
+}
+
+@keyframes floatHeroBadge1 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-1.5deg); }
+}
+@keyframes floatHeroBadge2 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(8px) rotate(1.5deg); }
+}
+.float-hero-badge-1 {
+  animation: floatHeroBadge1 4.5s ease-in-out infinite;
+}
+.float-hero-badge-2 {
+  animation: floatHeroBadge2 5.5s ease-in-out infinite;
+}
+
+@keyframes pulseBeacon {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+}
+.animate-beacon-ring {
+  animation: pulseBeacon 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes routePing {
+  0% { r: 5; opacity: 1; }
+  100% { r: 16; opacity: 0; }
+}
+.route-ping-circle {
+  animation: routePing 1.8s ease-out infinite;
+}
+
+/* Respect user's reduced motion system settings (10.6) */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
