@@ -74,6 +74,106 @@ The initial migrations are committed. Do not run `makemigrations` as part of a
 normal startup; run it only after an intentional model change, review the
 generated migration, and commit it with the model change.
 
+## Local multi-user hosting (LAN and small pilots)
+
+Use one of these depending on what you are validating.
+
+### Option A: Fast LAN test from one machine
+
+Use this when you want 2-10 users on phones/laptops to hit one backend quickly.
+
+1. Start backend on the host machine:
+
+   ```powershell
+   cd backend
+   .venv\Scripts\Activate.ps1
+   python manage.py migrate
+   python manage.py runserver 0.0.0.0:8000
+   ```
+
+2. On the host machine, find the LAN IP:
+
+   ```powershell
+   ipconfig
+   ```
+
+3. Set `DJANGO_ALLOWED_HOSTS` in `.env` to include that IP
+   (for example `DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.1.10`),
+   then restart the server.
+
+4. On other devices in the same network, use:
+   `http://<host-lan-ip>:8000/`.
+
+5. Keep `PAYMENT_PROVIDER=manual` for shared testing.
+
+This is the quickest route but still single-process unless you run Gunicorn.
+
+### Option B: Scalable local stack via Docker Compose
+
+Use this when you want production-like behavior on a local machine:
+separate API process, Postgres, Redis, Celery worker, and Celery beat.
+
+1. Copy local env template:
+
+   ```bash
+   cd backend
+   cp .env.local.example .env.local
+   ```
+
+2. Start all services:
+
+   ```bash
+   docker compose -f docker-compose.local.yml up --build -d
+   ```
+
+3. Check health:
+
+   ```bash
+   docker compose -f docker-compose.local.yml ps
+   docker compose -f docker-compose.local.yml logs api --tail 100
+   ```
+
+4. API is available at `http://localhost:8000` on the host machine.
+   For other devices in the same LAN, use `http://<host-lan-ip>:8000`.
+
+5. Shut down:
+
+   ```bash
+   docker compose -f docker-compose.local.yml down
+   ```
+
+   Add `-v` to also remove Postgres/Redis local data volumes.
+
+## Scalable architecture for growth
+
+Start with one API container and one worker, then scale horizontally by role.
+
+### Baseline services
+
+1. **API nodes (stateless):** Django + Gunicorn, multiple replicas behind a
+   load balancer.
+2. **Database (stateful):** managed PostgreSQL with backups and point-in-time
+   recovery.
+3. **Queue/broker:** managed Redis for Celery.
+4. **Background workers:** Celery worker pool for async and retries.
+5. **Scheduler:** one Celery beat instance only.
+6. **Object storage:** R2/B2 for media URLs.
+
+### Recommended scaling path
+
+- **Stage 1 (pilot):** 1 API + 1 worker + 1 beat
+- **Stage 2 (moderate load):** 2-3 API replicas + 2 worker replicas
+- **Stage 3 (higher load):** autoscaled API/worker pools, read replicas for
+  PostgreSQL, centralized observability, and blue/green deploys
+
+### Non-negotiable architecture rules
+
+- API processes remain stateless; no local disk assumptions.
+- Do not store media blobs in PostgreSQL.
+- Run exactly one beat scheduler in each environment.
+- Roll out schema migrations before scaling traffic to new application code.
+- Keep order/payment state transitions backend-enforced and audited.
+
 ## PostgreSQL initialization
 
 Create a database and role in PostgreSQL, then grant ownership:
