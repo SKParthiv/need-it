@@ -15,6 +15,8 @@ class PaymentProvider:
     def release(self, payment: Payment) -> dict:
         """Move held funds to the helper. MUST be idempotent (idempotency_key)."""
         raise NotImplementedError
+    def confirm(self, payment: Payment) -> dict:
+        raise NotImplementedError
     def refund(self, payment: Payment) -> dict:
         raise NotImplementedError
     def verify_webhook(self, headers, body: bytes) -> bool:
@@ -28,10 +30,14 @@ class ManualUPIProvider(PaymentProvider):
     enough to gate the state machine until real escrow lands.
     """
     name = "manual"
-    def create_charge(self, payment):  # treated as instantly 'held' on confirmation
-        payment.status = PaymentStatus.HELD
+    def create_charge(self, payment):
+        payment.status = PaymentStatus.PENDING
         payment.provider = self.name
         payment.save(update_fields=["status", "provider", "updated_at"])
+        return {"status": "pending"}
+    def confirm(self, payment):
+        payment.status = PaymentStatus.HELD
+        payment.save(update_fields=["status", "updated_at"])
         return {"status": "held"}
     def release(self, payment):
         payment.status = PaymentStatus.RELEASED

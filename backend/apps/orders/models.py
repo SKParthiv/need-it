@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+import secrets
 
 
 class OrderStatus(models.TextChoices):
@@ -35,9 +36,18 @@ class Request(models.Model):
     expected_total = models.PositiveIntegerField(help_text="Customer's guess. NEVER charged.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    handover_code = models.CharField(max_length=12, blank=True)
+    customer_handover_confirmed = models.BooleanField(default=False)
+    helper_handover_confirmed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Request #{self.pk} ({self.status})"
+
+    def ensure_handover_code(self):
+        if not self.handover_code:
+            self.handover_code = secrets.token_urlsafe(6)[:8].upper()
+            self.save(update_fields=("handover_code",))
+        return self.handover_code
 
 
 class RequestItem(models.Model):
@@ -52,9 +62,11 @@ class RequestItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     expected_price = models.PositiveIntegerField()
     actual_price = models.PositiveIntegerField(null=True, blank=True)
+    price_approved = models.BooleanField(default=False)
     notes = models.CharField(max_length=300, blank=True)
     alternatives_allowed = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=ItemStatus.choices, default=ItemStatus.PENDING)
+    replacement_proposal = models.JSONField(null=True, blank=True)
 
 
 class StatusChange(models.Model):

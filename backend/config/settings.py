@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
     "apps.users",
     "apps.orders",
     "apps.payments",
@@ -29,6 +30,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -52,17 +54,21 @@ TEMPLATES = [{
     ]},
 }]
 
-# --- Database (Postgres) ---
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "needit"),
-        "USER": os.environ.get("POSTGRES_USER", "needit"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+# --- Database (Postgres in deployments, SQLite for local/test runs) ---
+if os.environ.get("POSTGRES_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "needit"),
+            "USER": os.environ.get("POSTGRES_USER", "needit"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ["POSTGRES_HOST"],
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3",
+                             "NAME": BASE_DIR / "db.sqlite3"}}
 
 AUTH_USER_MODEL = "users.User"
 
@@ -75,6 +81,17 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
 }
+
+COLLEGE_EMAIL_DOMAINS = [
+    domain.strip().lower()
+    for domain in os.environ.get("COLLEGE_EMAIL_DOMAINS", "").split(",")
+    if domain.strip()
+]
+PROHIBITED_ITEMS = [
+    item.strip().lower()
+    for item in os.environ.get("PROHIBITED_ITEMS", "").split(",")
+    if item.strip()
+]
 
 # --- Payments: which escrow provider is active ---
 # 'manual' (pilot: record confirmations) or 'razorpay' (real escrow via Route).
@@ -106,4 +123,6 @@ TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
