@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: needit
+      POSTGRES_USER: needit
+      POSTGRES_PASSWORD: needit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U needit -d needit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,host.docker.internal"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: needit
+      POSTGRES_USER: needit
+      POSTGRES_PASSWORD: needit
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: >
+      sh -c "python manage.py migrate &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 2 --timeout 60"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: needit
+      POSTGRES_USER: needit
+      POSTGRES_PASSWORD: needit
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: celery -A config worker --loglevel=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: needit
+      POSTGRES_USER: needit
+      POSTGRES_PASSWORD: needit
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: celery -A config beat --loglevel=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

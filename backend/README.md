@@ -36,6 +36,8 @@ in `.env` to use Postgres.
 
 For the complete PostgreSQL, Redis/Celery, object storage, Render, and CI/CD
 setup, see [`docs/backend-setup-and-deployment.md`](../docs/backend-setup-and-deployment.md).
+For local multi-machine testing, Docker Compose, and scaling topology, use the
+same guide.
 
 ## Status of each app
 
