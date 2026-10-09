@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Need It — V1 Architecture & Userflow Mind Map</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#1a1a2e; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .markmap { position:fixed; top:34px; bottom:0; left:0; right:0; width:100%; height:calc(100% - 34px); }
+  .banner { position:fixed; top:0; left:0; right:0; height:34px; z-index:10; background:#16213e; color:#e0e0e0; padding:0 16px; font-size:13px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #0f3460; box-sizing:border-box; }
+  .banner b { color:#00d9ff; }
+  .banner .hint { color:#8a8aa0; }
+  @media print { .banner { display:none; } .markmap { position:static; height:100vh; } }
+</style>
+<script>
+window.markmap = { autoLoader: { manual: false } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18.10/dist/index.js"></script>
+</head>
+<body>
+<div class="banner">
+  <span><b>NEED IT — V1 · Mobile App</b> &nbsp;·&nbsp; click nodes to fold/unfold · scroll to zoom · drag to pan</span>
+  <span class="hint">Server owns all state · UI freedom marked 🎨</span>
+</div>
+<div class="markmap">
+<script type="text/template">
+---
+markmap:
+  initialExpandLevel: 2
+  colorFreezeLevel: 2
+  maxWidth: 320
+---
+# NEED IT — V1
+## 🏗️ Architecture
+### Mobile app — the product
+- Customers + helpers, one app, role-switch
+- React Native (Expo) — or native; your frontend dev decides
+- Talks to the API; never owns business logic
+### Company website — static, no backend
+- About · how it works · contact · waitlist
+- Deep links into the app (Play Store / TestFlight)
+- Any static host; not part of the API
+### API — Django + DRF + Postgres
+- Owns all state and all money logic
+- Stateless auth; no CSRF needed (no cookies)
+## 📱 App Screens
+### Auth
+- Welcome / role choice (customer · helper)
+- Register — college email, password, policy accept
+- Verify — email token → "verified" screen
+- Login
+### Customer
+- My requests (list + status chips)
+- Create request (items, price, needed-by, urgent, pickup point)
+- Request detail — status timeline + chat + actions
+- Pay screen — item cost + fee shown separately → UPI
+- Profile — name, hostel block, pickup point
+### Helper
+- Feed — open requests (item, fee, needed-by, pickup)
+- My orders
+- Order detail — chat, propose price, mark purchased, handover code
+- Availability — "going out" windows (SHOULD)
+### Shared
+- Chat thread (text + photos)
+- Handover — one-time code entry + confirm
+- Report a problem
+- Notifications center
+## 🔐 Auth — Mobile
+### Token auth (not cookies)
+- Login → server returns access + refresh token (JWT or DRF token)
+- Access token on every request: `Authorization: Bearer`
+- Refresh flow when access expires
+- Stored in secure storage (Keychain / Keystore), never AsyncStorage plain
+### Registration
+- College email domain allowlist (@college.edu)
+- Role at signup: customer / helper (both allowed)
+- Policy + prohibited-items acceptance stored with timestamp
+### Verification
+- Email link with signed token → deep link back into app
+- Unverified = read-only: cannot post or accept
+### No CSRF
+- Token-in-header is not cookie-auth → CSRF class of attacks doesn't apply
+## 🧩 Order State Machine
+### States
+- OPEN
+- ACCEPTED
+- PURCHASED
+- HANDED_OVER
+- COMPLETED
+- CANCELLED — separate end state
+- RELEASED → back to OPEN
+### Transitions — guarded in DB
+- open → accepted — helper accepts · `UPDATE WHERE status='open'` · rows-affected check
+- accepted → released → open — helper releases before purchase · auto-release on payment timeout
+- accepted → purchased — guard: `payment.status='held'` · helper marks purchased
+- purchased → handed_over — both one-time codes confirmed
+- handed_over → completed — settlement webhook (gateway release confirmed)
+- accepted → cancelled — customer cancels before purchase → auto-refund
+- purchased → cancelled — needs helper agreement · dispute path
+### Rules
+- Server owns the machine; app renders state, never asserts it
+- Every transition = guarded DB update, check rows affected
+- Illegal transitions impossible at storage layer
+## 💸 Payment Sub-Machine
+### States
+- none → pending → held → released
+- pending → failed
+- held → refunded — on cancel
+### Triggers
+- Price confirmed in-app → charge exact amount (never the guess)
+- payment held → unlocks purchased transition
+- payment failed → customer retries, order stays accepted
+- Payment timeout (Celery) → auto-release request to feed
+- Both codes confirmed → release call (idempotent key) → webhook → completed
+### Provider abstraction
+- `PaymentProvider` interface
+- ManualUPIProvider — pilot: record confirmations, no money
+- RazorpayRouteProvider — escrow: KYC-gated, flip via config
+## 🔌 API Surface — REST, DRF
+### Auth
+- `POST /api/auth/register/` — email, password, role, policy accept
+- `GET /api/auth/verify/?token=` — email verification
+- `POST /api/auth/login/` → tokens · `POST /api/auth/logout/`
+- `POST /api/auth/refresh/` — new access token
+- `GET /api/me/` — profile + role + verification status
+### Requests — customer
+- `GET /api/requests/` · `POST /api/requests/`
+- `GET /api/requests/:id/` · `PATCH /api/requests/:id/` — only while OPEN
+- `POST /api/requests/:id/cancel/`
+- Prohibited items blocked server-side at POST
+### Feed — helper
+- `GET /api/feed/` — open only (locked/completed hidden)
+- `POST /api/requests/:id/accept/` — guarded, one winner
+- `POST /api/requests/:id/release/`
+- `POST /api/orders/:id/mark-purchased/` — guard: payment held
+- `POST /api/orders/:id/mark-unavailable/` — item + reason + photo
+### Price & items
+- `POST /api/orders/:id/propose-price/` — helper proposes actual price
+- `POST /api/orders/:id/approve-price/` — customer approves → charge
+- `POST /api/orders/:id/approve-replacement/` — photo + approve/cancel item
+### Payment
+- `POST /api/orders/:id/pay/` — create charge (provider)
+- `POST /api/webhooks/payment/` — signature verified, event-id idempotent
+- `GET /api/orders/:id/payment-status/`
+### Handover & completion
+- `GET /api/orders/:id/handover-code/` — one-time code
+- `POST /api/orders/:id/confirm-handover/` — both sides
+- `POST /api/orders/:id/report/` — logs to club team
+### Chat
+- `GET /api/orders/:id/messages/` — polling for pilot
+- `POST /api/orders/:id/messages/` — text + photos
+- Read-only after completion
+## 🗄️ Data Model — Postgres
+- User — email, role(s), verified, policy_accepted_at, hostel block, pickup point
+- Request — items[], status, needed_by, urgent, pickup point
+- RequestItem — name, qty, expected price, notes, alternatives allowed
+- Order — 1:1 with accepted request · helper, status, timestamps per state
+- Payment — provider, status, amount, gateway ids, event log
+- ChatMessage — order FK, sender, text, photo url
+- HandoverCode — order FK, one-time, used_at
+- Report — order FK, from_user, resolved flag
+- ProhibitedItem — static list (alcohol, tobacco, medicines, college bans)
+- Notification — user FK, type, read flag (pilot: WhatsApp broadcast too)
+## 🎨 UI Designer Freedom
+### Company website — fully yours
+- Brand, story, screenshots, copy personality
+- One job: get people to install the app
+### App — yours, within the contract
+- Visual language: colors, type, iconography, motion
+- Screen layouts, empty states, loading, error states
+- How status is shown (chips, timeline, color)
+- Chat UI, handover screen, pay screen composition
+### Constrained — server contract
+- Status names & transitions: fixed vocabulary
+- Action buttons appear/disappear strictly by server state
+- "Confirm handover" copy must include: confirming releases the money
+- Pay screen must show item cost + helper fee separately
+- Prohibited items blocked with clear server message
+### Suggested
+- Status chips: OPEN · ACCEPTED · PURCHASED · HANDED_OVER · COMPLETED
+- One primary action per screen (accept → chat → approve → pay)
+- Needed-by time prominent on feed cards
+## 📱 Non-functional
+- Mobile-first by definition; offline-tolerant reads (cache feed/messages)
+- Photos: compress on-device, upload to object storage (S3-compatible)
+- Chat polling OK for pilot; websockets / push later
+- Push notifications: FCM/APNs when gateway KYC lands; WhatsApp broadcast pilot workaround
+- Deep links: email verify, invite, order open
+- Audit: every state change logged with actor + timestamp
+- App size + cold-start matter on student phones — keep it lean
+</script>
+</div>
+</body>
+</html>
