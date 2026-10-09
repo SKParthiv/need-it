@@ -78,12 +78,6 @@ For a native Android build, use `cd apps/mobile/android; .\gradlew.bat assembleD
 
 ## 4. Test the website
 
-The current `web/` directory contains only a placeholder README and no Vite
-project or frontend source. There is consequently no website command that can
-run from this checkout.
-
-Once the website source is restored:
-
 ```powershell
 cd web
 npm install
@@ -91,9 +85,10 @@ npm run dev
 ```
 
 Open the displayed local URL and verify the landing page, responsive layout,
-navigation, links, form validation, and API error states. The website must not
-implement order state transitions or payment calculations; those remain
-backend responsibilities.
+navigation, links, form validation, and API error states. The current website
+uses frontend mock data; verify that this is intentional before wiring it to
+the backend. The website must not implement order state transitions or payment
+calculations; those remain backend responsibilities.
 
 ## 5. Release checks
 
