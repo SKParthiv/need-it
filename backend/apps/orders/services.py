@@ -59,6 +59,9 @@ def mark_purchased(request_id, actor):
     The helper never fronts cash — this is enforced here, not in the UI.
     """
     from apps.payments.models import Payment, PaymentStatus
+    request = Request.objects.get(pk=request_id)
+    if request.helper_id != actor.id:
+        raise IllegalTransition("only the assigned helper can mark a request purchased")
     payment = Payment.objects.filter(request_id=request_id).first()
     if not payment or payment.status != PaymentStatus.HELD:
         raise IllegalTransition("cannot mark purchased: payment is not held")
@@ -95,11 +98,19 @@ def complete(request_id, actor=None):
 
 
 def cancel(request_id, actor, note="", helper_agree=False):
-    req = Request.objects.get(pk=request_id)
-    if actor.id == req.customer_id and req.status == OrderStatus.PURCHASED and not helper_agree:
-        raise IllegalTransition("post-purchase cancellation requires helper agreement")
-    if actor.id not in (req.customer_id, req.helper_id):
-        raise IllegalTransition("only the customer or assigned helper can cancel")
-    if req.status in (OrderStatus.OPEN, OrderStatus.ACCEPTED, OrderStatus.PURCHASED):
+    from apps.payments.services import refund
+    from apps.payments.models import Payment, PaymentStatus
+
+    with transaction.atomic():
+        req = Request.objects.select_for_update().get(pk=request_id)
+        if actor.id == req.customer_id and req.status == OrderStatus.PURCHASED and not helper_agree:
+            raise IllegalTransition("post-purchase cancellation requires helper agreement")
+        if actor.id not in (req.customer_id, req.helper_id):
+            raise IllegalTransition("only the customer or assigned helper can cancel")
+        if req.status not in (OrderStatus.OPEN, OrderStatus.ACCEPTED, OrderStatus.PURCHASED):
+            raise IllegalTransition(f"cannot cancel from {req.status}")
+
+        payment = Payment.objects.select_for_update().filter(request_id=request_id).first()
+        if payment and payment.status in (PaymentStatus.PENDING, PaymentStatus.HELD):
+            refund(payment)
         return _guarded_move(request_id, req.status, OrderStatus.CANCELLED, actor, note or "cancelled")
-    raise IllegalTransition(f"cannot cancel from {req.status}")

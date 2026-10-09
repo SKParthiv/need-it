@@ -67,6 +67,9 @@ cd web && npm install && npm run dev
 cd backend && pip install -r requirements.txt && python manage.py runserver
 ```
 
+For the complete step-by-step backend, mobile app, website, and API test
+procedure, see [`docs/client-and-api-testing.md`](docs/client-and-api-testing.md).
+
 ## Contributing
 
 New to GitHub or pushing code here? **Start with the pinned "Contributing" issue**

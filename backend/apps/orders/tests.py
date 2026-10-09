@@ -37,6 +37,17 @@ class StateMachineTests(TestCase):
         with self.assertRaises(services.IllegalTransition):
             services.mark_purchased(self.req.id, self.helper)
 
+    def test_only_assigned_helper_can_mark_purchased(self):
+        services.accept(self.req.id, self.helper)
+        Payment.objects.create(request=self.req, item_cost=80, helper_fee=20,
+                               idempotency_key="k-assigned", status=PaymentStatus.HELD)
+        other_helper = User.objects.create_user("other")
+        other_helper.role = "helper"
+        other_helper.is_verified_student = True
+        other_helper.save(update_fields=("role", "is_verified_student"))
+        with self.assertRaises(services.IllegalTransition):
+            services.mark_purchased(self.req.id, other_helper)
+
     def test_full_happy_path(self):
         services.accept(self.req.id, self.helper)
         Payment.objects.create(request=self.req, item_cost=80, helper_fee=20,
@@ -51,3 +62,14 @@ class StateMachineTests(TestCase):
         obj = services.release(self.req.id, self.helper)
         self.assertEqual(obj.status, OrderStatus.OPEN)
         self.assertIsNone(Request.objects.get(id=self.req.id).helper)
+
+    def test_cancel_refunds_held_payment(self):
+        services.accept(self.req.id, self.helper)
+        payment = Payment.objects.create(
+            request=self.req, item_cost=80, helper_fee=20,
+            idempotency_key="k-cancel", status=PaymentStatus.HELD,
+        )
+        obj = services.cancel(self.req.id, self.helper)
+        self.assertEqual(obj.status, OrderStatus.CANCELLED)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, PaymentStatus.REFUNDED)
