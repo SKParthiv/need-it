@@ -53,6 +53,20 @@ def accept(request, pk):
 
 
 @api_view(["POST"])
+def mark_purchased(request, pk):
+    if (not request.user.is_verified_student
+            or request.user.role != "helper"):
+        return Response({"detail": IsVerifiedStudent.message}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        obj = services.mark_purchased(pk, request.user)
+    except services.ConflictLost as error:
+        return Response({"detail": str(error)}, status=status.HTTP_409_CONFLICT)
+    except services.IllegalTransition as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"id": obj.id, "status": obj.status})
+
+
+@api_view(["POST"])
 def release(request, pk):
     if not request.user.is_verified_student:
         return Response({"detail": IsVerifiedStudent.message}, status=status.HTTP_403_FORBIDDEN)
