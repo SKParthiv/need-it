@@ -30,12 +30,15 @@ the upgrade path — it needs real VM admin, so don't start there.
    - `POSTGRES_HOST` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — from step 1
    - `ADMIN_EMAIL` + `ADMIN_PASSWORD` — your superuser. The deploy creates it
      automatically (`ensure_admin`). **Remove both vars after the first deploy.**
-   - `EMAIL_HOST` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` — optional but
-     recommended: real verification emails. Gmail works free (500/day, plenty
-     for 200 users): Google Account → Security → 2-Step Verification →
-     App passwords → mail → paste the 16-char password. `EMAIL_HOST=smtp.gmail.com`,
-     user = that Gmail address. Without these, register returns the token in
-     the API response (pilot mode — works, but proves nothing).
+   - `BREVO_API_KEY` + `DEFAULT_FROM_EMAIL` — optional but recommended: real
+     verification emails. NOTE: Render's free tier blocks outbound SMTP
+     (ports 25/465/587), so Gmail SMTP does NOT work there — the code uses
+     Brevo's HTTP API instead (free 300 emails/day, no card):
+     brevo.com → sign up → Settings → SMTP & API → API Keys → create key.
+     `DEFAULT_FROM_EMAIL` must be a sender you verify in Brevo (your Gmail
+     address works: Senders → add → click the confirmation email).
+     Without these, register returns the token in the API response
+     (pilot mode — works, but proves nothing).
 3. Deploy. Visit `https://<your-domain>/` → JSON status. Log into
    `https://<your-domain>/admin/` with the admin creds.
 
@@ -76,7 +79,7 @@ hook only after Backend CI passes on main (see 2b). Free on a public repo.
   requests/day — that IS 200 users of a campus errand app. It sleeps after
   15 min idle; with real usage it stays warm during the day.
 - **Neon free** (0.5 GB): thousands of orders fit easily. Photos are URLs only.
-- **Gmail SMTP**: 500 emails/day — onboarding 200 users = 200 emails. Fits.
+- **Brevo free**: 300 emails/day — onboarding 200 users = 200 emails. Fits (spread big launch days, or resend next morning).
 - **At ~1000 users**: you said money exists by then — first upgrades are
   Render Starter ($7/mo, no sleep, more CPU) and Neon Launch ($19/mo). The
   architecture doesn't change, only the plan sizes.

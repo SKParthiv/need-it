@@ -150,20 +150,30 @@ if not DEBUG:
     ]
 
 # --- Email (verification links) ---
-# Set EMAIL_HOST + credentials (e.g. Gmail app password) to send real mail.
-# Without them we fall back to returning the token in the API response (pilot mode).
+# Render's free tier BLOCKS outbound SMTP (ports 25/465/587), so production
+# uses an HTTP email API: Brevo (300 emails/day free, no card) via anymail.
+# Set BREVO_API_KEY in production. Plain SMTP (EMAIL_HOST et al.) still works
+# for local/dev where port 587 is open. With neither configured, register
+# returns the token in the API response (pilot mode).
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@needit.local")
-EMAIL_BACKEND = os.environ.get(
-    "EMAIL_BACKEND",
-    "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST
-    else "django.core.mail.backends.console.EmailBackend",
-)
-EMAIL_CONFIGURED = bool(EMAIL_HOST and EMAIL_HOST_USER)
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "Need It <noreply@needit.in>")
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+    ANYMAIL = {"BREVO_API_KEY": BREVO_API_KEY}
+    EMAIL_CONFIGURED = True
+elif EMAIL_HOST and EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_CONFIGURED = True
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    EMAIL_CONFIGURED = False
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", EMAIL_BACKEND)
 
 # Public origin of THIS api, used to build verification links in emails.
 PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "http://localhost:8000").rstrip("/")
