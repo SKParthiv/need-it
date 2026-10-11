@@ -8,7 +8,6 @@ def root_view(request):
         "service": "Need It Backend API",
         "message": "The web application frontend is running on port 3000.",
         "website_url": "http://localhost:3000",
-        "network_url": "http://172.22.17.13:3000",
         "admin_url": "/admin/",
     })
 
@@ -19,4 +18,7 @@ urlpatterns = [
     path("api/", include("apps.payments.urls")),
     path("api/", include("apps.users.urls")),
     path("api/", include("apps.chat.urls")),
+    path("api/", include("apps.notifications.urls")),
+    path("api/", include("apps.availability.urls")),
+    path("api/", include("apps.reports.urls")),
 ]

@@ -33,6 +33,9 @@ def _guarded_move(request_id, expect, to, actor, note=""):
 
 
 def accept(request_id, helper):
+    # Conflict check comes FIRST: if the request is no longer open, the guarded
+    # move raises ConflictLost (409) regardless of who is asking — this keeps
+    # the two-helpers-race semantics the state machine tests rely on.
     req = Request.objects.get(pk=request_id)
     if req.status != OrderStatus.OPEN:
         _guarded_move(request_id, OrderStatus.OPEN, OrderStatus.ACCEPTED, helper, "helper accepted")
@@ -40,6 +43,10 @@ def accept(request_id, helper):
         raise IllegalTransition("only a verified helper can accept a request")
     obj = _guarded_move(request_id, OrderStatus.OPEN, OrderStatus.ACCEPTED, helper, "helper accepted")
     Request.objects.filter(pk=request_id).update(helper=helper)
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(obj.customer, Notification.Type.ACCEPTED,
+           "Request accepted", "A helper accepted your request. Chat is now open.", order=obj)
     return obj
 
 
@@ -79,6 +86,10 @@ def confirm_handover(request_id, actor):
         req.customer_handover_confirmed = True
     elif actor.id == req.helper_id:
         req.helper_handover_confirmed = True
+        from apps.notifications.services import notify
+        from apps.notifications.models import Notification
+        notify(req.customer, Notification.Type.READY_FOR_PICKUP,
+               "Ready for pickup", "Your helper is ready to hand over your items.", order=req)
     else:
         raise IllegalTransition("only the customer or helper can confirm handover")
     req.save(update_fields=("customer_handover_confirmed", "helper_handover_confirmed", "updated_at"))
@@ -94,7 +105,13 @@ def confirm_handover(request_id, actor):
 
 def complete(request_id, actor=None):
     """Reached from the settlement webhook after funds release — mechanical."""
-    return _guarded_move(request_id, OrderStatus.HANDED_OVER, OrderStatus.COMPLETED, actor, "completed")
+    obj = _guarded_move(request_id, OrderStatus.HANDED_OVER, OrderStatus.COMPLETED, actor, "completed")
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    for recipient in (obj.customer, obj.helper):
+        notify(recipient, Notification.Type.COMPLETED,
+               "Order completed", "Payment settled. Thanks for using Need It!", order=obj)
+    return obj
 
 
 def cancel(request_id, actor, note="", helper_agree=False):

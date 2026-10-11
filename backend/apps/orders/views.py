@@ -101,6 +101,10 @@ def propose_price(request, pk, item_id):
     item.actual_price = request.data.get("actualPrice")
     item.price_approved = False
     item.save(update_fields=("actual_price", "price_approved"))
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(item.request.customer, Notification.Type.PRICE_CHANGE,
+           "Price proposed", f"New price proposed for {item.name}.", order=item.request)
     return Response({"id": item.id, "actualPrice": item.actual_price, "priceApproved": False})
 
 
@@ -114,6 +118,11 @@ def approve_price(request, pk):
     if items.filter(actual_price__isnull=True).exists():
         return Response({"detail": "Every item needs an actual price first."}, status=400)
     items.update(price_approved=True)
+    if obj.helper_id:
+        from apps.notifications.services import notify
+        from apps.notifications.models import Notification
+        notify(obj.helper, Notification.Type.PRICE_CHANGE,
+               "Prices approved", "The customer approved the item prices.", order=obj)
     return Response({"approved": list(items.values_list("id", flat=True))})
 
 
@@ -124,6 +133,10 @@ def mark_unavailable(request, pk, item_id):
         return Response({"detail": "Only the assigned helper can update this item."}, status=403)
     item.status = RequestItem.ItemStatus.UNAVAILABLE
     item.save(update_fields=("status",))
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(item.request.customer, Notification.Type.ITEM_UNAVAILABLE,
+           "Item unavailable", f"{item.name} is unavailable.", order=item.request)
     return Response({"id": item.id, "status": item.status})
 
 
