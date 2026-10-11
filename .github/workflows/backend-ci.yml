@@ -23,6 +23,7 @@ jobs:
         working-directory: backend
     env:
       DJANGO_SECRET_KEY: ci-only-not-a-production-secret
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_DEBUG: "false"
       PAYMENT_PROVIDER: manual
     steps:
