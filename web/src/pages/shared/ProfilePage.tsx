@@ -14,7 +14,7 @@ import {
 import { VerifiedBadge } from '../../components/common/VerifiedBadge';
 import { campusPickupPoints } from '../../data/mockData';
 import { UserRole } from '../../types';
-import { useWebApp } from '../../context/WebAppContext';
+import { useWebApp, SUPER_ADMIN_EMAIL } from '../../context/WebAppContext';
 
 interface ProfilePageProps {
   role: UserRole;
@@ -113,7 +113,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
                 <Sparkles className="w-3.5 h-3.5" /> Developer Multi-Interface Switcher:
               </span>
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">130180058@sastra.ac.in</span>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">{SUPER_ADMIN_EMAIL}</span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button

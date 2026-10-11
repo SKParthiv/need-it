@@ -80,7 +80,7 @@ const DEFAULT_USERS = {
   },
   superAdmin: {
     name: 'Sri Thinesh',
-    email: '130180058@sastra.ac.in',
+    email: SUPER_ADMIN_EMAIL || 'admin@sastra.ac.in',
     alias: 'Developer & Super Admin',
     hostel: 'Admin / Dev HQ',
     pickupPoint: 'ASK Building / Fountain Area',

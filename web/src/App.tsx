@@ -172,7 +172,7 @@ const AppContent: React.FC = () => {
 
     // Strict Interface Isolation Guard:
     // Ordinary users cannot directly access another role's interface routes.
-    // Developer Super Admin (130180058@sastra.ac.in) can access all interfaces.
+    // Developer Super Admin (first entry in VITE_ADMIN_EMAILS) can access all interfaces.
     if (!isSuperAdmin) {
       const isCustomerRoute =
         currentPath === '/app/home' ||
