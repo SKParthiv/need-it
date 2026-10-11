@@ -96,3 +96,30 @@ Before opening a PR, run the backend commands in section 2, manually complete
 the smoke flow, and confirm that no client or server logs contain secrets.
 Document any blocked client test as a repository gap rather than marking it
 passed.
+
+## 6. Opening the app on other devices (phone, another laptop)
+
+Both dev servers already listen on all interfaces (`runserver 0.0.0.0:8000`,
+Vite `host: true`). If another device on the same Wi-Fi cannot connect, walk
+this list in order:
+
+1. **Use the real LAN IP, not the virtual one.** Windows machines often have
+   WSL/Hyper-V adapters with `172.x.x.x` addresses — phones cannot reach those.
+   `start-web.ps1` prints the correct `192.168.x.x` / `10.x.x.x` URL; use that
+   one. To check by hand: `Get-NetIPAddress -AddressFamily IPv4`.
+2. **Django DisallowedHost.** Fixed: with `DJANGO_DEBUG=true` the backend now
+   accepts any host (`ALLOWED_HOSTS = "*"`). With DEBUG off the host list must
+   be set explicitly — that is intentional and must stay.
+3. **Windows Defender Firewall.** The first time node/python opened a port,
+   Windows showed an "Allow access" prompt. If it was dismissed, add rules
+   once in an elevated PowerShell:
+   ```powershell
+   New-NetFirewallRule -DisplayName "NeedIt Vite 3000" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+   New-NetFirewallRule -DisplayName "NeedIt Django 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+   ```
+4. **Same network.** Phone and laptop must be on the same Wi-Fi, and the
+   network must not have client isolation (common on campus/hostel Wi-Fi —
+   if devices cannot ping each other, that is the cause; use your own hotspot
+   for testing).
+5. **Direct API testing** from another device: `http://<LAN-IP>:8000/api/...`
+   works the same way; the Vite proxy is only needed for the web UI.
