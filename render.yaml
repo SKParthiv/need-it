@@ -43,11 +43,13 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      # Real verification emails (optional; Gmail app password works, 500/day free).
-      # Without these, register returns the token in the API response (pilot mode).
-      - key: EMAIL_HOST
-        sync: false        # smtp.gmail.com
-      - key: EMAIL_HOST_USER
+      # Real verification emails. Render free BLOCKS outbound SMTP (25/465/587),
+      # so use Brevo's HTTP API: free 300 emails/day, no card. Sign up, Settings
+      # -> SMTP & API -> API Keys, and verify your sender address (a Gmail works).
+      - key: BREVO_API_KEY
         sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false        # Gmail: 16-char app password
+      - key: DEFAULT_FROM_EMAIL
+        sync: false        # e.g. Need It <you@gmail.com> — must be the verified sender
+      # (EMAIL_HOST/EMAIL_HOST_USER/EMAIL_HOST_PASSWORD also work as SMTP fallback
+      #  where port 587 isn't blocked — e.g. a future paid host or local testing.)
+      # Without email config, register returns the token in the API response.
