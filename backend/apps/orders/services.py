@@ -131,3 +131,34 @@ def cancel(request_id, actor, note="", helper_agree=False):
         if payment and payment.status in (PaymentStatus.PENDING, PaymentStatus.HELD):
             refund(payment)
         return _guarded_move(request_id, req.status, OrderStatus.CANCELLED, actor, note or "cancelled")
+
+
+def sweep_stale_accepted(now=None):
+    """Free-tier replacement for the Celery timeout job.
+
+    Accepted orders with no HELD payment that have been idle longer than
+    PAYMENT_TIMEOUT_MINUTES go back to the feed (helper cleared) so they
+    never get stuck invisible to other helpers. Called on every feed read —
+    at pilot scale a cron worker is unjustified infrastructure.
+    """
+    from datetime import timedelta
+    from django.conf import settings
+    from django.utils import timezone
+    from apps.payments.models import Payment, PaymentStatus
+
+    now = now or timezone.now()
+    cutoff = now - timedelta(minutes=settings.PAYMENT_TIMEOUT_MINUTES)
+    stale = Request.objects.filter(
+        status=OrderStatus.ACCEPTED, updated_at__lt=cutoff,
+    ).exclude(payment__status=PaymentStatus.HELD)
+
+    released = 0
+    for req in stale:
+        payment = Payment.objects.filter(request_id=req.id).first()
+        if payment and payment.status == PaymentStatus.PENDING:
+            continue  # money may be mid-flight; only idle UNPAID orders release
+        _guarded_move(req.id, OrderStatus.ACCEPTED, OrderStatus.OPEN,
+                      None, "auto-released: no payment within timeout")
+        Request.objects.filter(pk=req.id).update(helper=None)
+        released += 1
+    return released

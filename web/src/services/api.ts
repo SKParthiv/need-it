@@ -4,6 +4,10 @@
  */
 
 const TOKEN_KEY = 'needit_auth_token';
+
+// Dev: empty base -> Vite proxy forwards /api to Django.
+// Prod: set VITE_API_URL to the deployed backend origin (e.g. https://needit-api.onrender.com).
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const USER_KEY = 'needit_user_data';
 
 export const getStoredToken = (): string | null => {
@@ -40,7 +44,7 @@ async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): P
     headers['Authorization'] = `Token ${token}`;
   }
 
-  const response = await fetch(`/api${endpoint}`, {
+  const response = await fetch(`${API_BASE}/api${endpoint}`, {
     ...options,
     headers,
   });
