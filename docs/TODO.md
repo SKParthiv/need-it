@@ -4,8 +4,8 @@ _Updated 2026-10-09, after backend phases 1–7 + deployment automation landed._
 
 ## Where we are
 
-- **Backend:** Phases 1–7 done — auth, requests/feed, accept-with-lock, price confirmation, escrow core, handover codes, chat. Tests per app. Local + scalable deployment documented and automated (`docs/backend-setup-and-deployment.md`, Docker Compose).
-- **Backend remaining:** Phase 8 notifications, Phase 9 availability, Phase 10 reports/trust, Phase 11 shops (probably cut for pilot), Phase 12 production hardening.
+- **Backend:** Phases 1–10 done (notifications, availability, reports landed 2026-10-11; shops skipped for pilot) — auth, requests/feed, accept-with-lock, price confirmation, escrow core, handover codes, chat. Tests per app. Local + scalable deployment documented and automated (`docs/backend-setup-and-deployment.md`, Docker Compose).
+- **Backend remaining:** Phase 12 only — deploy (render.yaml + CI + free-tier guide in `docs/deploy-free-tier.md` are done; remaining is account setup + first deploy).
 - **Mobile:** ⚠️ `apps/mobile/` contains only the native `android/` shell. The actual Expo source — `package.json`, `app.json`, `src/`, all screens — is **not in this repo**. Nobody else can build or run the app today.
 - **Web:** company site lives in `web/`.
 - **Workflow:** PR flow is working (PRs #4–6 merged). Keep it: one phase or one feature per PR.

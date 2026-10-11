@@ -11,6 +11,7 @@ wins until the doc is changed — by agreement, not by accident.
 | `userflow-mindmap-v1.html` | Interactive map of the whole system — screens, API, data model, auth (open in a browser, click to expand) | everyone |
 | `backend-plan.md` | Orchestrator-ready phased build plan + free-tier storage analysis | backend |
 | `backend-setup-and-deployment.md` | How to run, deploy, and scale the backend | backend |
+| `deploy-free-tier.md` | Render + Neon + Pages deploy, ~30 min, ₹0 | backend |
 | `TODO.md` | Current status and next steps | everyone |
 
 ## Reading order for a newcomer

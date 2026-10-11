@@ -55,9 +55,11 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.availability",
     "apps.reports",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -134,6 +136,11 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "")
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "")
 S3_SECRET_KEY = os.environ.get("S3_SECRET_KEY", "")
+
+# --- CORS (web app on a different origin calls the API) ---
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
+).split(",")
 
 # --- Push (FCM) ---
 FCM_SERVER_KEY = os.environ.get("FCM_SERVER_KEY", "")

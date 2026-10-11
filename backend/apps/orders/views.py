@@ -9,6 +9,7 @@ from . import services
 
 @api_view(["GET"])
 def feed(request):
+    services.sweep_stale_accepted()  # lazy timeout job (free tier: no Celery)
     queryset = Request.objects.filter(status=OrderStatus.OPEN).prefetch_related("items").order_by("needed_by")
     return Response(RequestSerializer(queryset, many=True, context={"request": request}).data)
 

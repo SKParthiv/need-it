@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
-from apps.orders.models import OrderStatus, Request
+from apps.orders.models import OrderStatus, Request, RequestItem
 from apps.orders import services
 from apps.payments.models import Payment, PaymentStatus
 
@@ -73,3 +73,53 @@ class StateMachineTests(TestCase):
         self.assertEqual(obj.status, OrderStatus.CANCELLED)
         payment.refresh_from_db()
         self.assertEqual(payment.status, PaymentStatus.REFUNDED)
+
+
+class TimeoutSweepTests(TestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            "sweep-c@sastra.ac.in", password="x", role="customer", is_verified_student=True)
+        self.helper = User.objects.create_user(
+            "sweep-h@sastra.ac.in", password="x", role="helper", is_verified_student=True)
+        from django.utils import timezone
+        self.req = Request.objects.create(
+            customer=self.customer, needed_by=timezone.now(),
+            pickup_point="Boys Hostel Area", expected_total=100)
+        RequestItem.objects.create(request=self.req, name="Maggi", quantity=2, expected_price=100)
+
+    def _make_stale(self, minutes=60):
+        from django.utils import timezone
+        from datetime import timedelta
+        services.accept(self.req.id, self.helper)
+        Request.objects.filter(pk=self.req.id).update(
+            updated_at=timezone.now() - timedelta(minutes=minutes))
+
+    def test_stale_unpaid_accepted_order_returns_to_feed(self):
+        self._make_stale()
+        released = services.sweep_stale_accepted()
+        self.assertEqual(released, 1)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.OPEN)
+        self.assertIsNone(self.req.helper)
+
+    def test_fresh_accepted_order_is_untouched(self):
+        services.accept(self.req.id, self.helper)
+        self.assertEqual(services.sweep_stale_accepted(), 0)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.ACCEPTED)
+
+    def test_held_payment_never_swept(self):
+        self._make_stale()
+        from apps.payments.models import Payment, PaymentStatus
+        Payment.objects.create(request=self.req, item_cost=100, helper_fee=30,
+                               status=PaymentStatus.HELD)
+        self.assertEqual(services.sweep_stale_accepted(), 0)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.ACCEPTED)
+
+    def test_pending_payment_not_swept(self):
+        self._make_stale()
+        from apps.payments.models import Payment, PaymentStatus
+        Payment.objects.create(request=self.req, item_cost=100, helper_fee=30,
+                               status=PaymentStatus.PENDING)
+        self.assertEqual(services.sweep_stale_accepted(), 0)
