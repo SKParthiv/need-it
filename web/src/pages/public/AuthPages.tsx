@@ -78,7 +78,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(trimmed);
       if (!isAuthorizedAdmin) {
         setError(
-          'Access Restricted: Admin Console is strictly reserved for the 3 authorized campus administrators. For developer testing, use 130180058@sastra.ac.in.'
+          'Access Restricted: Admin Console is strictly reserved for the 3 authorized campus administrators. For developer testing, use the lead developer account configured in VITE_ADMIN_EMAILS.'
         );
         return;
       }
@@ -323,7 +323,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                   <div className="font-semibold">Campus Admin Whitelist Enforced</div>
                   <div className="text-[11px] text-purple-800 dark:text-purple-300">
                     Only 3 authorized campus administrators can access this interface. Lead developer:{' '}
-                    <span className="font-mono font-bold">130180058@sastra.ac.in</span>.
+                    <span className="font-mono font-bold">{SUPER_ADMIN_EMAIL || 'configured via VITE_ADMIN_EMAILS'}</span>.
                   </div>
                 </div>
               </div>
