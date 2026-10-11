@@ -4,14 +4,27 @@ from .providers import get_provider
 
 
 def create_payment(request, item_cost, helper_fee, idempotency_key):
-    """Charge the ACTUAL confirmed amount (cost + fee), never the expected guess."""
+    """Charge the ACTUAL confirmed amount (cost + fee), never the expected guess.
+
+    Idempotent: re-calling while a payment is PENDING or HELD returns it
+    unchanged — a double-tap must never regress status or double-charge.
+    After a refund/failure the amounts are re-quoted and charged again.
+    Returns the Payment object (callers need .status and .total).
+    """
     payment, _ = Payment.objects.get_or_create(
         request=request,
         defaults={"item_cost": item_cost, "helper_fee": helper_fee,
                   "idempotency_key": idempotency_key},
     )
+    if payment.status in (PaymentStatus.PENDING, PaymentStatus.HELD):
+        return payment
+    if payment.item_cost != item_cost or payment.helper_fee != helper_fee:
+        payment.item_cost = item_cost
+        payment.helper_fee = helper_fee
+        payment.save(update_fields=("item_cost", "helper_fee", "updated_at"))
     provider = get_provider()
-    return provider.create_charge(payment)
+    provider.create_charge(payment)
+    return payment
 
 
 def release_to_helper(payment):

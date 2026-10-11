@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
-      - "docs/backend-setup-and-deployment.md"
+      - "docs/**"
       - ".github/workflows/backend-ci.yml"
   push:
     branches:
@@ -12,7 +12,7 @@ on:
       - "backend/**"
     paths:
       - "backend/**"
-      - "docs/backend-setup-and-deployment.md"
+      - "docs/**"
       - ".github/workflows/backend-ci.yml"
 
 jobs:
