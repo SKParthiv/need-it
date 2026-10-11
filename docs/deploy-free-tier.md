@@ -21,14 +21,33 @@ the upgrade path — it needs real VM admin, so don't start there.
 
 1. render.com → sign up with GitHub → **New → Blueprint** → pick `need-it`.
    Render reads `render.yaml` from the repo root and creates `needit-api`.
-2. Fill the 8 env vars it asks for:
+2. Fill the env vars it asks for:
    - `DJANGO_SECRET_KEY` — generate: `python -c "import secrets; print(secrets.token_urlsafe(50))"`
    - `DJANGO_ALLOWED_HOSTS` — `needit-api.onrender.com` (your actual Render domain)
-   - `CORS_ALLOWED_ORIGINS` — leave `http://localhost:3000` for now; add the Pages URL in step 3
+   - `CSRF_TRUSTED_ORIGINS` — `https://needit-api.onrender.com` (needed for /admin/ login)
+   - `CORS_ALLOWED_ORIGINS` — `http://localhost:3000` for now; add the Pages URL in step 3
+   - `PUBLIC_API_BASE_URL` — `https://needit-api.onrender.com` (goes into verification emails)
    - `POSTGRES_HOST` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — from step 1
-3. Deploy. Build runs migrations automatically. Visit `https://<your-domain>/`
-   — you should see the JSON status view.
-4. **Every push to `main` auto-deploys from now on.** That is the workflow.
+   - `ADMIN_EMAIL` + `ADMIN_PASSWORD` — your superuser. The deploy creates it
+     automatically (`ensure_admin`). **Remove both vars after the first deploy.**
+   - `EMAIL_HOST` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` — optional but
+     recommended: real verification emails. Gmail works free (500/day, plenty
+     for 200 users): Google Account → Security → 2-Step Verification →
+     App passwords → mail → paste the 16-char password. `EMAIL_HOST=smtp.gmail.com`,
+     user = that Gmail address. Without these, register returns the token in
+     the API response (pilot mode — works, but proves nothing).
+3. Deploy. Visit `https://<your-domain>/` → JSON status. Log into
+   `https://<your-domain>/admin/` with the admin creds.
+
+## 2b. The pipeline (2 min, one time)
+
+Deploys do NOT happen on push directly. The pipeline is:
+**push to main → Backend CI green → GitHub Actions triggers the Render deploy hook.**
+
+1. Render → your service → Settings → Build & Deploy → copy the **Deploy Hook** URL.
+2. GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+   name `RENDER_DEPLOY_HOOK_URL`, value = the hook URL.
+3. Done. Red CI = no deploy. Green CI = production updates itself.
 
 ## 3. Web app — Cloudflare Pages (10 min, optional for pilot)
 
@@ -39,21 +58,33 @@ the upgrade path — it needs real VM admin, so don't start there.
 4. Back on Render: add the Pages URL to `CORS_ALLOWED_ORIGINS`
    (e.g. `http://localhost:3000,https://needit.pages.dev`).
 
-## 4. CI — already done
+## 4. CI/CD — already done
 
-`.github/workflows/ci.yml` runs on every PR and push to main: backend tests
-(35) + web type-check + web build. Red check = don't merge. Free on a public repo.
+`backend-ci.yml` runs backend tests in production config on every backend
+change; `ci.yml` builds the web app; `deploy.yml` triggers the Render deploy
+hook only after Backend CI passes on main (see 2b). Free on a public repo.
 
 ## 5. What we deliberately did NOT set up
 
 - **Celery + Redis** — the payment-timeout auto-release runs as a lazy sweep on
   every feed read (`sweep_stale_accepted`). At pilot scale a worker + broker is
   dead weight. Revisit when Razorpay webhooks make timing critical.
+
+## 6. Capacity reality (100–200 users, spike to 1000)
+
+- **Render free web** (512 MB, shared CPU): comfortable for a few thousand
+  requests/day — that IS 200 users of a campus errand app. It sleeps after
+  15 min idle; with real usage it stays warm during the day.
+- **Neon free** (0.5 GB): thousands of orders fit easily. Photos are URLs only.
+- **Gmail SMTP**: 500 emails/day — onboarding 200 users = 200 emails. Fits.
+- **At ~1000 users**: you said money exists by then — first upgrades are
+  Render Starter ($7/mo, no sleep, more CPU) and Neon Launch ($19/mo). The
+  architecture doesn't change, only the plan sizes.
 - **Razorpay Route** — KYC paperwork is weeks; `ManualUPIProvider` runs the
   pilot. Start the KYC *now* in parallel — it's the long pole, not code.
 - **Branch protection** — parked until there's something deployed to protect.
 
-## 6. Demo-day checklist
+## 7. Demo-day checklist
 
 - [ ] Open the API URL once (wake it from sleep) 5 min before the demo
 - [ ] Seed accounts exist (run seed locally against Neon ONLY with ALLOW_SEED — better: register fresh accounts through the app)

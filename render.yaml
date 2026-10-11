@@ -1,6 +1,10 @@
-# Render Blueprint — one-click free-tier deploy of the backend.
-# Dashboard → New → Blueprint → pick this repo. Render reads this file.
-# You only fill in the 4 secret env vars (marked sync: false).
+# Render Blueprint — free-tier production deploy of the backend.
+# Dashboard → New → Blueprint → pick this repo. Fill the sync:false secrets.
+#
+# autoDeploy is OFF on purpose: deploys are triggered by the GitHub Actions
+# "Deploy" workflow (which runs only after Backend CI passes on main).
+# In Render: service → Settings → Build & Deploy → copy the Deploy Hook URL
+# into this repo's secrets as RENDER_DEPLOY_HOOK_URL.
 services:
   - type: web
     name: needit-api
@@ -8,22 +12,42 @@ services:
     rootDir: backend
     plan: free
     healthCheckPath: /
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --no-input
+    autoDeploy: false
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --no-input && python manage.py ensure_admin
     startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: DJANGO_DEBUG
         value: "false"
+      - key: COLLEGE_EMAIL_DOMAINS
+        value: sastra.ac.in
       - key: DJANGO_SECRET_KEY
         sync: false        # generate: python -c "import secrets; print(secrets.token_urlsafe(50))"
       - key: DJANGO_ALLOWED_HOSTS
-        sync: false        # your Render domain, e.g. needit-api.onrender.com
+        sync: false        # e.g. needit-api.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false        # e.g. https://needit-api.onrender.com (needed for /admin/)
       - key: CORS_ALLOWED_ORIGINS
-        sync: false        # your web app origin(s), comma-separated
+        sync: false        # web app origin(s), comma-separated
+      - key: PUBLIC_API_BASE_URL
+        sync: false        # e.g. https://needit-api.onrender.com (used in verification emails)
       - key: POSTGRES_HOST
-        sync: false        # from Neon dashboard (host without the port)
+        sync: false        # from Neon dashboard
       - key: POSTGRES_DB
         sync: false
       - key: POSTGRES_USER
         sync: false
       - key: POSTGRES_PASSWORD
         sync: false
+      # Superuser bootstrap (ensure_admin; no-ops if unset). Remove after first deploy.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Real verification emails (optional; Gmail app password works, 500/day free).
+      # Without these, register returns the token in the API response (pilot mode).
+      - key: EMAIL_HOST
+        sync: false        # smtp.gmail.com
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false        # Gmail: 16-char app password
