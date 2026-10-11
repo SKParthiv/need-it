@@ -10,13 +10,17 @@ import {
 } from '../types';
 import { api, getStoredToken, getStoredUser } from '../services/api';
 
-export const SUPER_ADMIN_EMAIL = '130180058@sastra.ac.in';
-export const AUTHORIZED_ADMIN_EMAILS = [
-  '130180058@sastra.ac.in', // Lead Developer & Super Admin
-  'needit.club@sastra.ac.in', // Campus Safety Council Admin
-  '125004001@sastra.ac.in', // Student Council Representative
-  'admin@sastra.ac.in',
-];
+// Admin emails come from web/.env (VITE_ADMIN_EMAILS, comma-separated) so the
+// repo does not publish real student addresses.
+// NOTE: this gates the UI only — it is cosmetic. Real admin enforcement must
+// be server-side (backend phase 10). Never trust this list for authorization.
+const envAdminEmails = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+  .split(',')
+  .map((e: string) => e.trim())
+  .filter(Boolean);
+
+export const AUTHORIZED_ADMIN_EMAILS: string[] = envAdminEmails;
+export const SUPER_ADMIN_EMAIL: string = AUTHORIZED_ADMIN_EMAILS[0] ?? '';
 
 interface WebAppContextType {
   role: UserRole;

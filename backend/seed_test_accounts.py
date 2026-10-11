@@ -4,8 +4,23 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
+from django.conf import settings
+
+# Seeding creates a SUPERUSER with a known password. It must never run
+# against a real database by accident.
+if not settings.DEBUG and os.environ.get("ALLOW_SEED") != "true":
+    raise SystemExit(
+        "Refusing to seed test accounts when DEBUG is off. "
+        "Set ALLOW_SEED=true only if you really mean it."
+    )
+
 from apps.users.models import User
 from rest_framework.authtoken.models import Token
+
+# Passwords come from the environment; these defaults are for local dev only
+# (the script is gated on DEBUG above).
+SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "TestPass123!")
+SEED_ADMIN_PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD", "AdminPass123!")
 
 def seed():
     accounts = [
@@ -17,7 +32,7 @@ def seed():
             "role": User.Role.CUSTOMER,
             "hostel_block": "Hostel Block A, Room 312",
             "pickup_point": "Boys’ Hostel Area",
-            "password": "TestPass123!",
+            "password": SEED_PASSWORD,
         },
         {
             "username": "helper@sastra.ac.in",
@@ -27,7 +42,7 @@ def seed():
             "role": User.Role.HELPER,
             "hostel_block": "Girls’ Hostel Area",
             "pickup_point": "Girls’ Hostel Area",
-            "password": "TestPass123!",
+            "password": SEED_PASSWORD,
         },
         {
             "username": "admin@sastra.ac.in",
@@ -37,7 +52,7 @@ def seed():
             "role": User.Role.CUSTOMER,
             "hostel_block": "Admin / Dev HQ",
             "pickup_point": "ASK Building / Fountain Area",
-            "password": "AdminPass123!",
+            "password": SEED_ADMIN_PASSWORD,
             "is_staff": True,
             "is_superuser": True,
         },

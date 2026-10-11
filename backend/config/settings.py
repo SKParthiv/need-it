@@ -19,9 +19,25 @@ if env_path.exists():
                 os.environ.setdefault(key.strip(), val.strip())
 
 # --- Core ---
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "local-dev-fallback-secret-key-needit")
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        # Local-dev convenience only. Never acceptable with DEBUG off:
+        # a predictable SECRET_KEY lets anyone forge sessions/tokens.
+        SECRET_KEY = "local-dev-fallback-secret-key-needit"
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is not true"
+        )
+# ALLOWED_HOSTS: in DEBUG default to "*" so phones/other laptops on the LAN can
+# reach the dev server. With DEBUG off it MUST be set explicitly via env.
+if DEBUG:
+    ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+else:
+    ALLOWED_HOSTS = os.environ["DJANGO_ALLOWED_HOSTS"].split(",")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
