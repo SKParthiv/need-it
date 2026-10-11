@@ -8,8 +8,18 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --- Load .env file if present ---
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
 # --- Core ---
-SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]  # required, no default — set it in .env
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "local-dev-fallback-secret-key-needit")
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 

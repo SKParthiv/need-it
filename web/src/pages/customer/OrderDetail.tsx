@@ -16,6 +16,7 @@ import {
   MapPin,
   Camera,
   ShieldAlert,
+  ShieldCheck,
   Send,
   Lock,
   ThumbsUp,
@@ -275,7 +276,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
             { id: 'chat', label: 'Chat', icon: MessageSquare, badge: chatData.unreadCount },
             { id: 'item_checks', label: 'Item Checks', icon: Camera },
             { id: 'price_approval', label: 'Price Approval', icon: ShoppingBag },
-            { id: 'payment', label: 'Payment (UPI)', icon: QrCode },
+            { id: 'payment', label: 'Escrow Payment', icon: Lock },
             { id: 'handover', label: 'Handover Code', icon: PackageCheck },
             { id: 'rating', label: 'Review & Rating', icon: Star },
           ].map((tab) => {
@@ -629,30 +630,48 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
             </div>
           )}
 
-          {/* TAB 5: PAYMENT (UPI) */}
+          {/* TAB 5: ESCROW PAYMENT */}
           {activeTab === 'payment' && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-heading font-bold text-base text-neutral-ink dark:text-neutral-dark-text">
-                  Split Payment Breakdown
-                </h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldCheck className="w-5 h-5 text-brand-teal" />
+                  <h3 className="font-heading font-bold text-base text-neutral-ink dark:text-neutral-dark-text">
+                    Campus Escrow Protection
+                  </h3>
+                </div>
                 <p className="text-xs text-neutral-secondary">
-                  Two separate moments: Store items paid via cashier QR, helper fee paid after physical handover.
+                  Your funds are held securely in Need It Escrow. Payment is ONLY released to the helper once physical handover is verified with your drop-off code.
                 </p>
               </div>
 
-              {/* Itemised Payment Sheet (Section 8) */}
+              {/* Escrow Status Progress Banner */}
+              <div className="p-4 rounded-panel bg-brand-teal-light/30 dark:bg-brand-teal/15 border border-brand-teal/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-brand-teal flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" /> Escrow Security Guarantee
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-teal text-white">
+                    {order.status === 'completed' ? 'Escrow Released' : 'Held in Escrow'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-secondary">
+                  Money captured &amp; held in escrow → Helper purchases items → Both confirm handover code → Escrow released to helper.
+                </p>
+              </div>
+
+              {/* Itemised Payment Breakdown */}
               <div className="p-5 rounded-panel border border-neutral-border dark:border-slate-800 bg-neutral-surface-alt/40 dark:bg-slate-800/40 space-y-4">
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center text-neutral-secondary">
-                    <span>Retail Goods Subtotal (Paid to Store)</span>
+                    <span>Retail Goods Subtotal (Held for Store)</span>
                     <span className="font-mono font-bold text-neutral-ink dark:text-neutral-dark-text text-sm">
                       ₹{order.itemCost}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-brand-teal font-medium">
-                    <span>Helper Delivery Fee (Paid after Handover)</span>
+                    <span>Helper Delivery Fee (Escrowed)</span>
                     <span className="font-mono font-bold text-sm">
                       ₹{order.helperFee}
                     </span>
@@ -661,35 +680,37 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
 
                 <div className="pt-3 border-t border-neutral-border dark:border-slate-700 flex justify-between items-center">
                   <span className="font-heading font-bold text-sm text-neutral-ink dark:text-neutral-dark-text">
-                    Total Order Value
+                    Total Amount into Escrow
                   </span>
                   <span className="font-mono font-extrabold text-xl text-brand-indigo dark:text-brand-indigo-darkmode">
                     ₹{order.totalCost}
                   </span>
                 </div>
 
-                {/* Primary Button: Open UPI App (Section 8) */}
+                {/* Primary Button: Pay into Escrow */}
                 <div className="pt-2 space-y-2">
                   <button
-                    onClick={() => alert('Simulating UPI App Intent (GPay / PhonePe / Paytm)...')}
-                    className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
+                    onClick={() => {
+                      alert('Simulating Escrow Payment Deposit (UPI / Gateway). Funds are now locked in Need It Escrow.');
+                      updateOrderStatus(order.id, 'accepted', { status: 'accepted' });
+                    }}
+                    className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-[0.98]"
                   >
-                    <QrCode className="w-4 h-4" />
-                    <span>Open UPI App to Pay Cashier</span>
+                    <Lock className="w-4 h-4" />
+                    <span>Authorize &amp; Deposit ₹{order.totalCost} in Escrow</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => alert('Payment marked done by customer.')}
-                    className="w-full h-10 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-body dark:text-slate-300 hover:bg-white"
-                  >
-                    I Have Completed Payment
-                  </button>
+                  <p className="text-center text-[10px] text-neutral-placeholder">
+                    Zero Risk: Full refund guaranteed if items are unavailable or delivery is cancelled before handover.
+                  </p>
                 </div>
               </div>
 
-              <div className="p-3 rounded-card bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300">
-                ✓ <strong>Reassurance:</strong> You pay nothing for unbought or declined items.
+              <div className="p-3 rounded-card bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                <span>
+                  <strong>Escrow Security:</strong> The helper never receives your money directly until you share the 4-digit handover verification code at the campus pickup point.
+                </span>
               </div>
             </div>
           )}

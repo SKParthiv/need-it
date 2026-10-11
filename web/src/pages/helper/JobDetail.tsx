@@ -151,12 +151,13 @@ export const JobDetail: React.FC<JobDetailProps> = ({
           </div>
 
           <div className="p-2.5 rounded-card bg-brand-teal-light/50 dark:bg-brand-teal/20 border border-brand-teal/30 text-right shrink-0">
-            <span className="text-[10px] uppercase font-bold text-brand-teal block">
-              Helper Fee Payout
+            <span className="text-[10px] uppercase font-bold text-brand-teal block flex items-center justify-end gap-1">
+              <Lock className="w-3 h-3" /> Escrow Payout
             </span>
             <span className="font-heading font-extrabold text-xl font-mono text-brand-teal-dark dark:text-emerald-300">
               ₹{order.helperFee}
             </span>
+            <span className="text-[9px] text-neutral-placeholder block">Releases at drop-off</span>
           </div>
         </div>
 
