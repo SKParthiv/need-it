@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import Payment
 from .services import confirm_payment, create_payment
-from apps.orders.models import Request, RequestItem
+from apps.orders.models import OrderStatus, Request, RequestItem
 from django.conf import settings
 
 
@@ -27,11 +27,18 @@ def pay(request, order_id):
     order = Request.objects.filter(pk=order_id, customer=request.user).first()
     if not order:
         return Response({"detail": "Order not found."}, status=404)
+    if order.status != OrderStatus.ACCEPTED:
+        return Response(
+            {"detail": "Payment can start only after a helper accepts the order."},
+            status=400)
+    unavailable = RequestItem.ItemStatus.UNAVAILABLE
     if RequestItem.objects.filter(request=order).exclude(
-        status=RequestItem.ItemStatus.UNAVAILABLE
+        status=unavailable
     ).filter(price_approved=False).exists():
         return Response({"detail": "All item prices must be approved first."}, status=400)
-    item_cost = sum(item.actual_price or 0 for item in order.items.all())
+    # Unavailable items are not bought, so they are never charged.
+    item_cost = sum(item.actual_price or 0
+                    for item in order.items.exclude(status=unavailable))
     raw_helper_fee = request.data.get("helperFee", settings.HELPER_FEE_MIN)
     try:
         helper_fee = int(raw_helper_fee)
