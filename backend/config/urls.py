@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.urls import include, path
 from django.http import JsonResponse
+from django.db import connection
+from django.utils import timezone
+import os
 
 def root_view(request):
     return JsonResponse({
@@ -11,8 +14,30 @@ def root_view(request):
         "admin_url": "/admin/",
     })
 
+
+def health_view(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        return JsonResponse({
+            "status": "error",
+            "version": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+            "db": "error",
+            "time": timezone.now().isoformat(),
+        }, status=503)
+    return JsonResponse({
+        "status": "ok",
+        "version": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+        "db": "ok",
+        "time": timezone.now().isoformat(),
+    })
+
+
 urlpatterns = [
     path("", root_view),
+    path("api/health/", health_view),
     path("admin/", admin.site.urls),
     path("api/", include("apps.orders.urls")),
     path("api/", include("apps.payments.urls")),

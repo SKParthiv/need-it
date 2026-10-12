@@ -59,6 +59,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "config.middleware.RequestIdMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -203,3 +204,29 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {"()": "config.middleware.RequestIdFilter"},
+    },
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s %(levelname)s %(name)s "
+                      "request_id=%(request_id)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "filters": ["request_id"],
+            "formatter": "default",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("LOG_LEVEL", "INFO"),
+    },
+}

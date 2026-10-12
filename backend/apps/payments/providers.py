@@ -5,7 +5,27 @@ by PAYMENT_PROVIDER in settings. Pilot runs on ManualUPIProvider; when Razorpay
 Route KYC clears, flip one env var and the machine behaves identically.
 """
 from django.conf import settings
+import logging
 from .models import Payment, PaymentStatus
+from config.middleware import get_request_id
+
+
+logger = logging.getLogger(__name__)
+
+
+def _set_status(payment, status, update_fields):
+    previous = payment.status
+    payment.status = status
+    payment.save(update_fields=update_fields)
+    if previous != status:
+        logger.info(
+            "payment transition payment_id=%s order_id=%s from=%s to=%s request_id=%s",
+            payment.pk,
+            payment.request_id,
+            previous,
+            status,
+            get_request_id(),
+        )
 
 
 class PaymentProvider:
@@ -31,21 +51,18 @@ class ManualUPIProvider(PaymentProvider):
     """
     name = "manual"
     def create_charge(self, payment):
-        payment.status = PaymentStatus.PENDING
+        _set_status(payment, PaymentStatus.PENDING, ["status", "provider", "updated_at"])
         payment.provider = self.name
-        payment.save(update_fields=["status", "provider", "updated_at"])
+        payment.save(update_fields=["provider", "updated_at"])
         return {"status": "pending"}
     def confirm(self, payment):
-        payment.status = PaymentStatus.HELD
-        payment.save(update_fields=["status", "updated_at"])
+        _set_status(payment, PaymentStatus.HELD, ["status", "updated_at"])
         return {"status": "held"}
     def release(self, payment):
-        payment.status = PaymentStatus.RELEASED
-        payment.save(update_fields=["status", "updated_at"])
+        _set_status(payment, PaymentStatus.RELEASED, ["status", "updated_at"])
         return {"status": "released"}
     def refund(self, payment):
-        payment.status = PaymentStatus.REFUNDED
-        payment.save(update_fields=["status", "updated_at"])
+        _set_status(payment, PaymentStatus.REFUNDED, ["status", "updated_at"])
         return {"status": "refunded"}
     def verify_webhook(self, headers, body):  # no external webhooks in pilot
         return False

@@ -17,6 +17,10 @@ in `deploy-free-tier.md`; this file is day 2 onward.
 6. Cloudflare Pages site up; `VITE_API_URL` set; Pages URL added to
    `CORS_ALLOWED_ORIGINS`.
 
+The unauthenticated health check is `GET /api/health/`. For incidents, copy
+the response's `X-Request-ID` and use it to correlate request, order
+transition, and payment transition entries in Render logs.
+
 ## Every deploy after that
 
 Push to main. If Backend CI is green, production updates itself in ~2 min.
