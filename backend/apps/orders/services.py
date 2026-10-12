@@ -5,7 +5,9 @@ We do that with a guarded UPDATE that checks rows-affected — so two people
 acting at once can never both win, and an illegal transition can never write.
 """
 from django.db import transaction
+from django.db.models import F
 import logging
+import secrets
 from .models import OrderStatus, Request, RequestItem, StatusChange, ALLOWED_TRANSITIONS
 from config.middleware import get_request_id
 
@@ -89,38 +91,44 @@ def mark_purchased(request_id, actor):
             status=RequestItem.ItemStatus.UNAVAILABLE,
         ).exclude(price_approved=True).exists():
         raise IllegalTransition("cannot mark purchased: item prices are not approved")
-    return _guarded_move(request_id, OrderStatus.ACCEPTED, OrderStatus.PURCHASED, actor, "items purchased")
+    obj = _guarded_move(request_id, OrderStatus.ACCEPTED, OrderStatus.PURCHASED, actor, "items purchased")
+    # The customer's OTP is born here — they can show it from this moment on.
+    obj.ensure_handover_code()
+    return obj
 
 
-def confirm_handover(request_id, actor):
+HANDOVER_MAX_ATTEMPTS = 5
+
+
+def confirm_handover(request_id, actor, code):
+    """Single attestation: the customer SHOWS the OTP, the helper ENTERS it.
+    A correct code is the physical-handover proof — it releases the payment,
+    completes the order, and (MoR) creates the helper's payout, in one guarded
+    transition. Wrong codes are counted and the endpoint locks after 5."""
     req = Request.objects.get(pk=request_id)
-    req.ensure_handover_code()
-    if actor.id == req.customer_id:
-        req.customer_handover_confirmed = True
-    elif actor.id == req.helper_id:
-        req.helper_handover_confirmed = True
-        from apps.notifications.services import notify
-        from apps.notifications.models import Notification
-        notify(req.customer, Notification.Type.READY_FOR_PICKUP,
-               "Ready for pickup", "Your helper is ready to hand over your items.", order=req)
-    else:
-        raise IllegalTransition("only the customer or helper can confirm handover")
-    req.save(update_fields=("customer_handover_confirmed", "helper_handover_confirmed", "updated_at"))
-    if req.customer_handover_confirmed and req.helper_handover_confirmed:
-        obj = _guarded_move(request_id, OrderStatus.PURCHASED, OrderStatus.HANDED_OVER,
-                            actor, "both sides confirmed handover")
-        from apps.payments.services import release_to_helper, create_payout_for_order
-        payment = obj.payment
-        release_to_helper(payment)
-        obj = complete(request_id, actor)
-        try:
-            # MoR: the platform now owes the helper. Never let a payout hiccup
-            # 500 a completed handover — the failure is logged for backfill.
-            create_payout_for_order(obj)
-        except Exception:
-            logger.exception("payout creation failed for order %s — needs backfill", obj.pk)
-        return obj
-    return req
+    if req.helper_id != actor.id:
+        raise IllegalTransition("only the assigned helper can confirm the handover")
+    if req.status != OrderStatus.PURCHASED:
+        raise IllegalTransition("order is not awaiting handover")
+    if req.handover_attempts >= HANDOVER_MAX_ATTEMPTS:
+        raise IllegalTransition("too many wrong codes — contact Need It support")
+    if not secrets.compare_digest((code or "").strip(), req.handover_code):
+        Request.objects.filter(pk=request_id).update(
+            handover_attempts=F("handover_attempts") + 1)
+        left = HANDOVER_MAX_ATTEMPTS - req.handover_attempts - 1
+        raise IllegalTransition(f"wrong code — {left} attempt{'s' if left != 1 else ''} left")
+    obj = _guarded_move(request_id, OrderStatus.PURCHASED, OrderStatus.HANDED_OVER,
+                        actor, "helper entered the customer's handover OTP")
+    from apps.payments.services import release_to_helper, create_payout_for_order
+    release_to_helper(obj.payment)
+    obj = complete(request_id, actor)
+    try:
+        # MoR: the platform now owes the helper. Never let a payout hiccup
+        # 500 a completed handover — the failure is logged for backfill.
+        create_payout_for_order(obj)
+    except Exception:
+        logger.exception("payout creation failed for order %s — needs backfill", obj.pk)
+    return obj
 
 
 def complete(request_id, actor=None):

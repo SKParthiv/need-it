@@ -46,7 +46,7 @@ export interface Order {
   createdAt: string;
   helperId?: string;
   helperName?: string;
-  handoverCode: string;
+  handoverCode?: string; // customer-only, present once the order is purchased
   cancellationReason?: string;
   ratingGiven?: number;
   ratingFeedback?: string;

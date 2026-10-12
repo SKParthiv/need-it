@@ -731,6 +731,13 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
               </div>
 
               {/* Big 4-Digit Handover Code (10.4: digits fade in sequentially 50ms each) */}
+              {!order.handoverCode ? (
+                <div className="p-8 rounded-panel bg-neutral-surface-alt dark:bg-slate-900 border-2 border-dashed border-neutral-border dark:border-slate-700">
+                  <p className="text-xs text-neutral-secondary">
+                    Your code appears here once the helper marks your items as purchased.
+                  </p>
+                </div>
+              ) : (
               <div className="p-8 rounded-panel bg-neutral-surface-alt dark:bg-slate-900 border-2 border-dashed border-brand-indigo/40 space-y-2">
                 <span className="text-[11px] font-semibold text-neutral-secondary uppercase tracking-widest block">
                   One-Time Student Code
@@ -746,6 +753,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
                   Valid for {order.pickupPoint}
                 </span>
               </div>
+              )}
 
               <div className="p-3.5 rounded-card bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-left text-xs space-y-1">
                 <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text block">Meeting Location</span>

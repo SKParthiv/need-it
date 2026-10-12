@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { StatusChip } from '../../components/common/StatusChip';
 import { useWebApp } from '../../context/WebAppContext';
+import { api } from '../../services/api';
 import { OrderStatus } from '../../types';
 
 interface JobDetailProps {
@@ -34,7 +35,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
   orderId,
   onNavigate
 }) => {
-  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage } = useWebApp();
+  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage, refreshOrders } = useWebApp();
   const order = getOrderById(orderId);
 
   if (!order) {
@@ -93,6 +94,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({
 
   const [enteredCode, setEnteredCode] = useState('');
   const [codeVerified, setCodeVerified] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const [verifying, setVerifying] = useState(false);
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
 
@@ -489,22 +492,36 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                       type="text"
                       maxLength={4}
                       value={enteredCode}
-                      onChange={(e) => setEnteredCode(e.target.value)}
+                      onChange={(e) => { setEnteredCode(e.target.value); setCodeError(''); }}
                       className="w-48 h-14 mx-auto text-center font-mono font-extrabold text-2xl rounded-input border-2 border-brand-teal text-neutral-ink dark:text-neutral-dark-text tracking-widest focus:outline-none"
                     />
+                    {codeError && (
+                      <p className="mt-2 text-xs text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        {codeError}
+                      </p>
+                    )}
                   </div>
                   <button
-                    onClick={() => {
-                      if (enteredCode === order.handoverCode || enteredCode.length === 4) {
+                    onClick={async () => {
+                      // The server judges the code — the helper's copy of the
+                      // order deliberately never contains it.
+                      setCodeError('');
+                      setVerifying(true);
+                      try {
+                        await api.confirmHandover(parseInt(order.id, 10), enteredCode.trim());
                         setCodeVerified(true);
-                        updateOrderStatus(order.id, 'completed');
-                      } else {
-                        alert(`Please enter code "${order.handoverCode}" for this simulation.`);
+                        await refreshOrders();
+                      } catch (err: any) {
+                        setCodeError(err?.message || 'Could not verify the code.');
+                      } finally {
+                        setVerifying(false);
                       }
                     }}
-                    className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark active:scale-[0.98] transition-all duration-150 text-white text-xs font-semibold shadow-sm"
+                    disabled={verifying || enteredCode.trim().length !== 4}
+                    className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark active:scale-[0.98] transition-all duration-150 text-white text-xs font-semibold shadow-sm disabled:opacity-50"
                   >
-                    Verify Code
+                    {verifying ? 'Verifying…' : 'Verify Code'}
                   </button>
                 </div>
               )}
@@ -531,7 +548,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                   ₹{order.helperFee}
                 </div>
                 <span className="text-xs text-emerald-600 font-medium block">
-                  ✓ Received via Student UPI
+                  ✓ Settled as a Need It payout
                 </span>
               </div>
 

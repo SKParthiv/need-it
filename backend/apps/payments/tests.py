@@ -140,9 +140,8 @@ class PayoutFlowTests(TestCase):
         services.confirm_payment(payment, self.helper)  # both confirmed -> HELD
         order_services.mark_purchased(self.order.id, self.helper)
         self.order.refresh_from_db()
-        self.order.ensure_handover_code()
-        order_services.confirm_handover(self.order.id, self.cust)
-        return order_services.confirm_handover(self.order.id, self.helper)
+        return order_services.confirm_handover(self.order.id, self.helper,
+                                               self.order.handover_code)
 
     def _platform_collected(self):
         """Pretend the payment provider settles into the platform account (MoR)."""

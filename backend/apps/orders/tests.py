@@ -53,8 +53,8 @@ class StateMachineTests(TestCase):
         Payment.objects.create(request=self.req, item_cost=80, helper_fee=20,
                                idempotency_key="k1", status=PaymentStatus.HELD)
         services.mark_purchased(self.req.id, self.helper)
-        services.confirm_handover(self.req.id, self.cust)
-        obj = services.confirm_handover(self.req.id, self.helper)
+        self.req.refresh_from_db()
+        obj = services.confirm_handover(self.req.id, self.helper, self.req.handover_code)
         self.assertEqual(obj.status, OrderStatus.COMPLETED)
 
     def test_release_returns_to_feed(self):
@@ -123,3 +123,104 @@ class TimeoutSweepTests(TestCase):
         Payment.objects.create(request=self.req, item_cost=100, helper_fee=30,
                                status=PaymentStatus.PENDING)
         self.assertEqual(services.sweep_stale_accepted(), 0)
+
+
+class HandoverOtpTests(TestCase):
+    """The OTP is the physical-handover proof: the customer SHOWS it, the
+    helper ENTERS it, money moves. It must never leak through the API to
+    anyone but the customer, and wrong guesses must run out."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.payments.models import Payment, PaymentStatus
+        self.cust = User.objects.create_user("hc", password="x", is_verified_student=True)
+        self.helper = User.objects.create_user("hh", password="x", role="helper",
+                                               is_verified_student=True)
+        self.other = User.objects.create_user("hx", password="x", role="helper",
+                                              is_verified_student=True)
+        self.req = Request.objects.create(
+            customer=self.cust, helper=self.helper, status=OrderStatus.ACCEPTED,
+            needed_by=timezone.now(), pickup_point="Gate", expected_total=100)
+        RequestItem.objects.create(request=self.req, name="Milk", expected_price=50,
+                                   actual_price=50, price_approved=True)
+        Payment.objects.create(request=self.req, item_cost=50, helper_fee=20,
+                               idempotency_key="otp-k", status=PaymentStatus.HELD)
+        self.client = APIClient()
+
+    def _purchase(self):
+        services.mark_purchased(self.req.id, self.helper)
+        self.req.refresh_from_db()
+
+    def test_code_born_at_purchase_four_digits(self):
+        self.assertEqual(self.req.handover_code, "")
+        self._purchase()
+        self.assertRegex(self.req.handover_code, r"^\d{4}$")
+        self.assertEqual(self.req.handover_attempts, 0)
+
+    def test_customer_sees_code_helper_never_does(self):
+        self._purchase()
+        self.client.force_authenticate(self.cust)
+        data = self.client.get(f"/api/requests/{self.req.id}/").json()
+        self.assertEqual(data["handoverCode"], self.req.handover_code)
+        self.client.force_authenticate(self.helper)
+        data = self.client.get(f"/api/requests/{self.req.id}/").json()
+        self.assertIsNone(data["handoverCode"])  # must arrive physically, not via API
+
+    def test_open_order_has_no_code_for_anyone(self):
+        self.client.force_authenticate(self.cust)
+        data = self.client.get(f"/api/requests/{self.req.id}/").json()
+        self.assertIsNone(data["handoverCode"])
+
+    def test_customer_cannot_confirm(self):
+        self._purchase()
+        self.client.force_authenticate(self.cust)
+        resp = self.client.post(f"/api/requests/{self.req.id}/confirm-handover/",
+                                {"code": self.req.handover_code}, format="json")
+        self.assertEqual(resp.status_code, 403)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.PURCHASED)
+
+    def test_wrong_code_counts_attempts_and_locks(self):
+        self._purchase()
+        url = f"/api/requests/{self.req.id}/confirm-handover/"
+        self.client.force_authenticate(self.helper)
+        wrong = "0000" if self.req.handover_code != "0000" else "1111"
+        for attempt in range(5):
+            resp = self.client.post(url, {"code": wrong}, format="json")
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn("attempt", resp.json()["detail"])
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.handover_attempts, 5)
+        resp = self.client.post(url, {"code": self.req.handover_code}, format="json")
+        self.assertEqual(resp.status_code, 400)  # locked — even the right code
+        self.assertIn("support", resp.json()["detail"])
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.PURCHASED)
+
+    def test_right_code_completes_and_releases_money(self):
+        self._purchase()
+        self.client.force_authenticate(self.helper)
+        resp = self.client.post(f"/api/requests/{self.req.id}/confirm-handover/",
+                                {"code": self.req.handover_code}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "completed")
+        from apps.payments.models import PaymentStatus
+        self.assertEqual(self.req.payment.status, PaymentStatus.RELEASED)
+
+    def test_non_assigned_helper_rejected(self):
+        self._purchase()
+        self.client.force_authenticate(self.other)
+        resp = self.client.post(f"/api/requests/{self.req.id}/confirm-handover/",
+                                {"code": self.req.handover_code}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, OrderStatus.PURCHASED)
+
+    def test_cannot_handover_twice(self):
+        self._purchase()
+        self.client.force_authenticate(self.helper)
+        url = f"/api/requests/{self.req.id}/confirm-handover/"
+        self.assertEqual(self.client.post(url, {"code": self.req.handover_code},
+                                          format="json").status_code, 200)
+        resp = self.client.post(url, {"code": self.req.handover_code}, format="json")
+        self.assertEqual(resp.status_code, 400)  # completed — not awaiting handover
