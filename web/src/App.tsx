@@ -242,6 +242,7 @@ const AppContent: React.FC = () => {
     if (currentPath === '/club/shops') return <ClubConsole section="shops" onNavigate={navigate} />;
     if (currentPath === '/club/broadcast') return <ClubConsole section="broadcast" onNavigate={navigate} />;
     if (currentPath === '/club/insights') return <ClubConsole section="insights" onNavigate={navigate} />;
+    if (currentPath === '/club/payouts') return <ClubConsole section="payouts" onNavigate={navigate} />;
 
     // 7. Special Error Screens
     if (currentPath === '/404') return <SpecialScreens type="404" onNavigate={navigate} />;

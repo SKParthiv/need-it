@@ -84,3 +84,16 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 
 Resolution is manual by founders in `/admin/` — there is no automated
 punishment pipeline in v1.
+
+## Payouts (merchant of record)
+
+Completing an order creates one Payout when the active provider settles via the
+platform (MoR). `amount = item_cost + helper_fee − PLATFORM_CUT_PER_ORDER`.
+Manual-UPI mode creates no payout (money moved customer→helper directly).
+
+| Method | Path | Who | Body / Effect |
+| --- | --- | --- | --- |
+| GET | `admin/payouts/?status=due` | staff | due (or `paid`/`all`) payouts with helper UPI ID + amount breakdown |
+| POST | `admin/payouts/<id>/mark-paid/` | staff | `{utr}` — guarded: 409 if already settled |
+| GET | `earnings/` | authed | own payouts + `dueTotal`/`paidTotal` (helpers) |
+| PATCH | `me/` | authed | `{upi_id?}` — helper payout address (validated) |

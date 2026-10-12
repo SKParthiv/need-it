@@ -120,7 +120,7 @@ REST_FRAMEWORK = {
 }
 
 COLLEGE_EMAIL_DOMAINS = [
-    domain.strip().lower()
+    domain.strip().lower().lstrip("@")  # tolerate "@sastra.ac.in" style entries
     for domain in os.environ.get("COLLEGE_EMAIL_DOMAINS", "").split(",")
     if domain.strip()
 ]
@@ -198,6 +198,7 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/
 # --- Business rules (from PRD, tunable) ---
 HELPER_FEE_MIN = int(os.environ.get("HELPER_FEE_MIN", "20"))
 HELPER_FEE_MAX = int(os.environ.get("HELPER_FEE_MAX", "50"))
+PLATFORM_CUT_PER_ORDER = int(os.environ.get("PLATFORM_CUT_PER_ORDER", "2"))
 PAYMENT_TIMEOUT_MINUTES = int(os.environ.get("PAYMENT_TIMEOUT_MINUTES", "30"))
 ORDER_VALUE_CAP = int(os.environ.get("ORDER_VALUE_CAP", "2000"))
 

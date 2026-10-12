@@ -13,8 +13,16 @@ from .serializers import RegisterSerializer, UserSerializer
 
 TOKEN_SALT = "users.email-verification"
 
-@api_view(["GET"])
+@api_view(["GET", "PATCH"])
 def me(request):
+    if request.method == "PATCH":
+        # Whitelist: users may edit their own payout/profile basics only.
+        data = {key: request.data[key] for key in ("upi_id", "hostel_block", "pickup_point")
+                if key in request.data}
+        serializer = UserSerializer(request.user, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
     return Response(UserSerializer(request.user).data)
 
 

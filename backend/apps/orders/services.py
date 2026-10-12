@@ -109,10 +109,17 @@ def confirm_handover(request_id, actor):
     if req.customer_handover_confirmed and req.helper_handover_confirmed:
         obj = _guarded_move(request_id, OrderStatus.PURCHASED, OrderStatus.HANDED_OVER,
                             actor, "both sides confirmed handover")
-        from apps.payments.services import release_to_helper
+        from apps.payments.services import release_to_helper, create_payout_for_order
         payment = obj.payment
         release_to_helper(payment)
-        return complete(request_id, actor)
+        obj = complete(request_id, actor)
+        try:
+            # MoR: the platform now owes the helper. Never let a payout hiccup
+            # 500 a completed handover — the failure is logged for backfill.
+            create_payout_for_order(obj)
+        except Exception:
+            logger.exception("payout creation failed for order %s — needs backfill", obj.pk)
+        return obj
     return req
 
 
