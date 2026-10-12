@@ -17,6 +17,8 @@ export interface OrderItem {
   notes?: string;
   category: string;
   status: 'pending' | 'found' | 'unavailable' | 'replaced';
+  evidencePhotoUrl?: string; // helper's shelf/receipt photo — the customer's price evidence
+  priceApproved?: boolean;
   replacementProposal?: {
     name: string;
     price: number;

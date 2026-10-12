@@ -41,6 +41,7 @@ and the guarded write means a stale or double action can never corrupt state.
 ## Money rules
 
 - Charge the **actual confirmed amount** (item cost + helper fee), never the expected-price guess.
+- Price approval is **evidence-based**: the helper attaches a shelf/receipt photo (`evidencePhotoUrl` on the item) when proposing a price; the customer approves what they can see. Photos upload straight to Cloudinary with a server-issued signature — our API never proxies bytes.
 - The **gateway** holds the money, never us — in the ₹40L-turnover future (Razorpay Route, RBI-gated). Pilot runs on `ManualUPIProvider` (both sides confirm an out-of-band UPI transfer).
 - Handover OTP = attestation. The code is born at `mark_purchased`, renders in the API **only to the customer**, and the helper entering it correctly means the items physically changed hands — payment releases in the same guarded transition. 5 wrong codes lock the endpoint (founder unlocks via `/admin/`).
 - Webhooks: verify signature; dedupe on gateway event ID (retries are idempotent).
