@@ -10,7 +10,7 @@ in `deploy-free-tier.md`; this file is day 2 onward.
    `CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, `PUBLIC_API_BASE_URL` set.
 3. `ADMIN_EMAIL`/`ADMIN_PASSWORD` set for the first build, superuser confirmed
    at `/admin/`, then **both vars removed**.
-4. `BREVO_API_KEY` + `DEFAULT_FROM_EMAIL` (verified sender) set; register a
+4. `SENDGRID_API_KEY` + `DEFAULT_FROM_EMAIL` (verified sender) set; register a
    test account and confirm the email arrives.
 5. `RENDER_DEPLOY_HOOK_URL` added as a GitHub Actions secret → pipeline live
    (push → green Backend CI → auto deploy).
@@ -44,7 +44,7 @@ If CI is red, nothing deploys — fix main, don't force it.
 | --- | --- | --- | --- |
 | Render hours | 750/mo (month = 744 hrs) | service suspended until month reset | upgrade to Starter $7/mo |
 | Neon storage | 0.5 GB | writes fail | prune old orders; upgrade $19/mo |
-| Brevo email | 300/day | verification emails stop sending | they queue next day; or verify sender domain + paid |
+| SendGrid email | 100/day | verification emails stop sending | they queue next morning; or paid Essentials (~$20/mo) |
 | Render cold start | 15 min idle | first request takes ~1 min | expected; warm before demos |
 
 Capacity guide: 200 active users fits all four limits. At ~1000, upgrade
@@ -52,9 +52,9 @@ Render first (sleep + shared CPU is the first real pain), then Neon.
 
 ## Incident cookbook
 
-- **Users can't register** → Render logs: email errors mean Brevo key/sender
+- **Users can't register** → Render logs: email errors mean SendGrid key/sender
   issue; the API still returns tokens in the response if email is
-  unconfigured — check `BREVO_API_KEY` is present.
+  unconfigured — check `SENDGRID_API_KEY` is present.
 - **/admin/ login loops or CSRF errors** → `CSRF_TRUSTED_ORIGINS` must equal
   `https://<your-render-domain>` exactly.
 - **Orders stuck `accepted` forever** → they auto-release to the feed after

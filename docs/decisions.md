@@ -6,6 +6,24 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D6 — Email provider: SendGrid, not Brevo (2026-10-12)
+
+**Decision:** Verification emails go through SendGrid's HTTP API
+(`SENDGRID_API_KEY`, 100/day free, single-sender Gmail verification). The
+Brevo branch stays in settings as a fallback, but the default and the docs
+point at SendGrid.
+
+**Why:** First production deploy: Brevo risk-flagged the account (signup
+from a shared campus IP) and applied a **mandatory IP allowlist to API
+keys** — every call 401'd, and Render free's egress IPs are dynamic so they
+can never be allowlisted. An IP-restricted email key and a Render-hosted app
+are structurally incompatible. SendGrid has no such restriction on free.
+
+**Cost:** 100/day vs Brevo's 300/day — a 200-user launch spreads across two
+evenings instead of one. Acceptable.
+
+---
+
 ## D5 — Handover proof is a customer-shown OTP, helper-entered (2026-10-12)
 
 **Decision:** A 4-digit OTP is born at `mark_purchased`. It renders in the API
@@ -75,9 +93,9 @@ paper trail are our problem now. That's the price of collecting legally.
 
 **Decision:** API on Render free (750 instance-hrs/mo, sleeps after 15 min
 idle — warm before demos), Postgres on Neon free (0.5 GB, SSL required),
-static web on Cloudflare Pages. Email via Brevo HTTP API (300/day free) —
-Render free **blocks outbound SMTP**, so Gmail SMTP would have silently
-failed. ₹0, no card.
+static web on Cloudflare Pages. ~~Email via Brevo HTTP API (300/day free)~~
+→ superseded by D6 (SendGrid). Render free **blocks outbound SMTP**, so
+Gmail SMTP would have silently failed. ₹0, no card.
 
 **Why over Fly/Railway:** Railway = $5 trial then ~$1/mo credit (dies in
 days); Fly has no free tier at all (7-day trial, card required after).
