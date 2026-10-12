@@ -176,10 +176,10 @@ def confirm_handover(request, pk):
     obj = Request.objects.filter(pk=pk).first()
     if not obj:
         return Response({"detail": "Request not found."}, status=404)
-    if request.data.get("code") != obj.ensure_handover_code():
-        return Response({"detail": "Invalid handover code."}, status=400)
+    if request.user.role != "helper":
+        return Response({"detail": "Only the helper can enter the handover code."}, status=403)
     try:
-        obj = services.confirm_handover(pk, request.user)
+        obj = services.confirm_handover(pk, request.user, request.data.get("code", ""))
     except services.IllegalTransition as error:
         return Response({"detail": str(error)}, status=400)
     return Response({"id": obj.id, "status": obj.status})

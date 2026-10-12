@@ -130,7 +130,7 @@ function mapBackendRequestToOrder(req: any): Order {
       : 'Just now',
     helperId: req.helperId ? String(req.helperId) : undefined,
     helperName: req.helperId ? 'Helper Priya' : undefined,
-    handoverCode: req.handoverCode || '4092',
+    handoverCode: req.handoverCode || undefined, // server sends it to the customer only
   };
 }
 
@@ -296,8 +296,10 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else if (status === 'cancelled') {
           await api.cancelRequest(numericId, extra?.cancellationReason || 'Cancelled by user');
         } else if (status === 'completed') {
-          const code = extra?.handoverCode || '4092';
-          await api.confirmHandover(numericId, code);
+          const code = extra?.handoverCode;
+          if (code) {
+            await api.confirmHandover(numericId, code);
+          }
         }
       } catch (err) {
         console.warn(`Backend update status error for ${orderId}:`, err);

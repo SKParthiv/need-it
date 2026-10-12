@@ -37,15 +37,17 @@ class Request(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     handover_code = models.CharField(max_length=12, blank=True)
-    customer_handover_confirmed = models.BooleanField(default=False)
-    helper_handover_confirmed = models.BooleanField(default=False)
+    handover_attempts = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
         return f"Request #{self.pk} ({self.status})"
 
     def ensure_handover_code(self):
         if not self.handover_code:
-            self.handover_code = secrets.token_urlsafe(6)[:8].upper()
+            # 4-digit OTP, Rapido-style: the customer SHOWS it, the helper
+            # ENTERS it. Money moves on this code, so it only ever renders
+            # for the customer (see RequestSerializer.handoverCode).
+            self.handover_code = f"{secrets.randbelow(10000):04d}"
             self.save(update_fields=("handover_code",))
         return self.handover_code
 

@@ -18,7 +18,7 @@ everyone agreeing.
 | accepted | open | Helper releases, **or** payment-timeout job fires | Only before purchase; helper is cleared |
 | accepted | purchased | Helper marks purchased | **Escrow gate: payment must be `held`** — helper never fronts cash |
 | accepted | cancelled | Customer cancels before purchase | Triggers refund if payment exists |
-| purchased | handed_over | Both one-time codes confirmed | Both sides must confirm |
+| purchased | handed_over | Helper enters the customer's 4-digit OTP | Single attestation — the customer SHOWS it, the helper ENTERS it |
 | purchased | cancelled | Customer cancels **with helper agreement** | Dispute path |
 | handed_over | completed | Settlement webhook confirms release | Mechanical — no human step |
 | completed / cancelled | — | terminal | No further transitions |
@@ -35,14 +35,14 @@ and the guarded write means a stale or double action can never corrupt state.
 | `held` | Unlocks `accepted → purchased` |
 | `failed` | Order stays `accepted`; customer retries |
 | Timeout (no payment after price approval) | Order auto-releases to `open`, helper notified |
-| Both codes confirmed | Release call (idempotent key) → webhook → `released` → order `completed` |
+| OTP confirmed | Release call (idempotent key) → webhook → `released` → order `completed` |
 | Cancel before purchase | Refund → `refunded` |
 
 ## Money rules
 
 - Charge the **actual confirmed amount** (item cost + helper fee), never the expected-price guess.
 - The **gateway** holds the money, never us — in the ₹40L-turnover future (Razorpay Route, RBI-gated). Pilot runs on `ManualUPIProvider` (both sides confirm an out-of-band UPI transfer).
-- Handover confirm = attestation. The customer's confirm copy: **"I've received my items — release payment."**
+- Handover OTP = attestation. The code is born at `mark_purchased`, renders in the API **only to the customer**, and the helper entering it correctly means the items physically changed hands — payment releases in the same guarded transition. 5 wrong codes lock the endpoint (founder unlocks via `/admin/`).
 - Webhooks: verify signature; dedupe on gateway event ID (retries are idempotent).
 
 ## The three rules

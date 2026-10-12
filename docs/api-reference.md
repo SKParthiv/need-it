@@ -40,7 +40,7 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | POST | `requests/<id>/items/<item_id>/replacement/` | helper | `{replacementProposal}` |
 | POST | `requests/<id>/items/<item_id>/approve-replacement/` | customer | accepts replacement |
 | POST | `requests/<id>/mark-purchased/` | helper | **gated: payment must be `held` + all prices approved** |
-| POST | `requests/<id>/confirm-handover/` | both | double one-time-code; second confirm → `completed` + payment `released` |
+| POST | `requests/<id>/confirm-handover/` | helper | `{code}` — the customer's 4-digit OTP; correct → `completed` + payment `released` + payout created. Wrong codes counted, locks after 5 |
 | POST | `requests/<id>/cancel/` | participant | refunds pending/held payment; post-purchase needs helper agreement |
 | POST | `requests/<id>/release/` | — | legacy manual release; the handover path releases automatically |
 
