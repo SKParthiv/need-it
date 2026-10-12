@@ -83,7 +83,7 @@ hook only after Backend CI passes on main (see 2b). Free on a public repo.
 - **At ~1000 users**: you said money exists by then — first upgrades are
   Render Starter ($7/mo, no sleep, more CPU) and Neon Launch ($19/mo). The
   architecture doesn't change, only the plan sizes.
-- **Razorpay Route** — KYC paperwork is weeks; `ManualUPIProvider` runs the
+- **Payment gateway: see TODO.md — Route escrow is gated by RBI turnover rules; pilot runs manual UPI.
   pilot. Start the KYC *now* in parallel — it's the long pole, not code.
 - **Branch protection** — parked until there's something deployed to protect.
 

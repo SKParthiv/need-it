@@ -57,9 +57,12 @@ The state machine never touches a gateway. It calls the `PaymentProvider`
 interface (`apps/payments/providers.py`); `PAYMENT_PROVIDER` picks the
 implementation. Pilot = `ManualUPIProvider` (both sides confirm an
 out-of-band UPI transfer; "held" is a record that gates the machine).
-Razorpay Route slots in behind the same interface once KYC clears — the
-stubs mark the exact call sites. Webhook skeleton verifies signatures and
-dedupes events; it maps events to states once Razorpay is live.
+Razorpay Route slots in behind the same interface — BUT: per RBI's Sept 2025
+Payment Aggregator rules, Route requires ₹40L domestic turnover (GST-3B) or
+₹5L export (FIRC) in FY25/FY26. That gates true gateway escrow behind revenue
+we don't have — industry-wide, every licensed aggregator. The stubs stay as
+the marked seam for that future; the pilot money model is direct/manual UPI
+(see TODO.md). Webhook skeleton verifies signatures and dedupes events.
 
 ## Auth & users
 

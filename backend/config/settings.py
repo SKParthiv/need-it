@@ -95,6 +95,11 @@ if os.environ.get("POSTGRES_HOST"):
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
             "HOST": os.environ["POSTGRES_HOST"],
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            # Managed Postgres (Neon) REQUIRES SSL — without this the first
+            # deploy's migrate fails to connect. Local docker Postgres has no
+            # SSL, so default flips with DEBUG; override with POSTGRES_SSLMODE.
+            "OPTIONS": {"sslmode": os.environ.get(
+                "POSTGRES_SSLMODE", "disable" if DEBUG else "require")},
         }
     }
 else:
