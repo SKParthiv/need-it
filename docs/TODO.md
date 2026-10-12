@@ -25,7 +25,7 @@ money path**. What remains is accounts, deploy, and the mobile client.
 ## Blockers (founder actions, not code)
 
 1. **Deploy** — ~30 min in `deploy-free-tier.md`: Neon → Render env vars →
-   Brevo key → `RENDER_DEPLOY_HOOK_URL` secret → Pages.
+   SendGrid key → `RENDER_DEPLOY_HOOK_URL` secret → Pages.
 2. **Razorpay individual account** — PAN + Aadhaar + savings a/c, ~3–4
    working days. **Base account only — do NOT apply for Route** (₹40L
    turnover gate, RBI). During KYC, ask about **RazorpayX Payouts** (could

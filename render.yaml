@@ -44,9 +44,12 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       # Real verification emails. Render free BLOCKS outbound SMTP (25/465/587),
-      # so use Brevo's HTTP API: free 300 emails/day, no card. Sign up, Settings
-      # -> SMTP & API -> API Keys, and verify your sender address (a Gmail works).
-      - key: BREVO_API_KEY
+      # so use SendGrid's HTTP API: free 100 emails/day, no card. Sign up,
+      # Settings -> Sender Authentication -> Verify a Single Sender (a Gmail
+      # works), then Settings -> API Keys -> create (Full Access).
+      # (Brevo also works via BREVO_API_KEY, but their IP-restriction can
+      #  block Render's dynamic egress — SendGrid is the default for a reason.)
+      - key: SENDGRID_API_KEY
         sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false        # e.g. Need It <you@gmail.com> — must be the verified sender

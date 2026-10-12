@@ -12,7 +12,7 @@ wins — update this file in the same PR.
 | Static/admin | WhiteNoise | collectstatic runs in the deploy build |
 | Hosting | Render free web service | 512 MB, sleeps after 15 min idle, no shell |
 | Web client hosting | Cloudflare Pages | static build of `web/` |
-| Email | Brevo HTTP API (django-anymail) | Render free blocks SMTP ports; Brevo = 300/day free |
+| Email | SendGrid HTTP API (django-anymail) | Render free blocks SMTP ports; SendGrid = 100/day free |
 | Push | none yet | FCM planned with the mobile app |
 | Photos | none yet | S3-compatible URLs only, never DB blobs |
 | Background jobs | none | `sweep_stale_accepted()` runs lazily on every feed read |
@@ -84,7 +84,7 @@ late webhook cannot resurrect a refunded or cancelled payment.
 ## Auth & users
 
 Token auth: `Authorization: Token <key>`. Registration is restricted to
-`COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in prod). Email verification: Brevo
+`COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in prod). Email verification: SendGrid
 sends a one-click GET link; without email config the API returns the token
 in the register response (pilot mode — convenient, proves nothing).
 Superuser is created by `ensure_admin` during deploy (Render free has no

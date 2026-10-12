@@ -157,10 +157,13 @@ if not DEBUG:
 
 # --- Email (verification links) ---
 # Render's free tier BLOCKS outbound SMTP (ports 25/465/587), so production
-# uses an HTTP email API: Brevo (300 emails/day free, no card) via anymail.
-# Set BREVO_API_KEY in production. Plain SMTP (EMAIL_HOST et al.) still works
-# for local/dev where port 587 is open. With neither configured, register
-# returns the token in the API response (pilot mode).
+# uses an HTTP email API via anymail. Provider priority: SendGrid (100/day
+# free, no card, single-sender Gmail verification), then Brevo (300/day but
+# IP-restricts some accounts — unusable from Render's dynamic egress IPs).
+# Plain SMTP (EMAIL_HOST et al.) still works for local/dev where port 587 is
+# open. With none configured, register returns the token in the API
+# response (pilot mode).
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
@@ -169,7 +172,11 @@ EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "Need It <noreply@needit.in>")
-if BREVO_API_KEY:
+if SENDGRID_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+    ANYMAIL = {"SENDGRID_API_KEY": SENDGRID_API_KEY}
+    EMAIL_CONFIGURED = True
+elif BREVO_API_KEY:
     EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
     ANYMAIL = {"BREVO_API_KEY": BREVO_API_KEY}
     EMAIL_CONFIGURED = True

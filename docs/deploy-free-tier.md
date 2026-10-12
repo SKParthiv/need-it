@@ -34,13 +34,16 @@ the upgrade path — it needs real VM admin, so don't start there.
    - `POSTGRES_HOST` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — from step 1
    - `ADMIN_EMAIL` + `ADMIN_PASSWORD` — your superuser. The deploy creates it
      automatically (`ensure_admin`). **Remove both vars after the first deploy.**
-   - `BREVO_API_KEY` + `DEFAULT_FROM_EMAIL` — optional but recommended: real
+   - `SENDGRID_API_KEY` + `DEFAULT_FROM_EMAIL` — optional but recommended: real
      verification emails. NOTE: Render's free tier blocks outbound SMTP
      (ports 25/465/587), so Gmail SMTP does NOT work there — the code uses
-     Brevo's HTTP API instead (free 300 emails/day, no card):
-     brevo.com → sign up → Settings → SMTP & API → API Keys → create key.
-     `DEFAULT_FROM_EMAIL` must be a sender you verify in Brevo (your Gmail
-     address works: Senders → add → click the confirmation email).
+     SendGrid's HTTP API instead (free 100 emails/day, no card):
+     sendgrid.com → sign up → Settings → Sender Authentication → Verify a
+     Single Sender (your Gmail) → Settings → API Keys → create (Full Access).
+     `DEFAULT_FROM_EMAIL` must be that verified sender address.
+     (Brevo also works via `BREVO_API_KEY`, but their account-level IP
+     restriction blocks Render's dynamic egress IPs — learned the hard way,
+     see decisions.md D6.)
      Without these, register returns the token in the API response
      (pilot mode — works, but proves nothing).
 3. Deploy. Visit `https://<your-domain>/api/health/` → JSON health status
@@ -84,7 +87,8 @@ hook only after Backend CI passes on main (see 2b). Free on a public repo.
   requests/day — that IS 200 users of a campus errand app. It sleeps after
   15 min idle; with real usage it stays warm during the day.
 - **Neon free** (0.5 GB): thousands of orders fit easily. Photos are URLs only.
-- **Brevo free**: 300 emails/day — onboarding 200 users = 200 emails. Fits (spread big launch days, or resend next morning).
+- **SendGrid free**: 100 emails/day — onboarding 200 users = 200 emails. Spread
+  a big launch across two evenings, or resend stragglers next morning.
 - **At ~1000 users**: you said money exists by then — first upgrades are
   Render Starter ($7/mo, no sleep, more CPU) and Neon Launch ($19/mo). The
   architecture doesn't change, only the plan sizes.
