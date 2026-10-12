@@ -23,10 +23,14 @@ the upgrade path — it needs real VM admin, so don't start there.
    Render reads `render.yaml` from the repo root and creates `needit-api`.
 2. Fill the env vars it asks for:
    - `DJANGO_SECRET_KEY` — generate: `python -c "import secrets; print(secrets.token_urlsafe(50))"`
-   - `DJANGO_ALLOWED_HOSTS` — `needit-api.onrender.com` (your actual Render domain)
-   - `CSRF_TRUSTED_ORIGINS` — `https://needit-api.onrender.com` (needed for /admin/ login)
+   - `DJANGO_ALLOWED_HOSTS` — your actual Render domain. NOTE: if another
+     service already owns `needit-api`, Render appends a suffix
+     (ours is `needit-api-orfb.onrender.com`) — check the service page for
+     the real URL and use THAT, or Django boots fine but 400s every request
+     with `DisallowedHost`
+   - `CSRF_TRUSTED_ORIGINS` — `https://<same real domain>` (needed for /admin/ login)
    - `CORS_ALLOWED_ORIGINS` — `http://localhost:3000` for now; add the Pages URL in step 3
-   - `PUBLIC_API_BASE_URL` — `https://needit-api.onrender.com` (goes into verification emails)
+   - `PUBLIC_API_BASE_URL` — `https://<same real domain>` (goes into verification emails)
    - `POSTGRES_HOST` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — from step 1
    - `ADMIN_EMAIL` + `ADMIN_PASSWORD` — your superuser. The deploy creates it
      automatically (`ensure_admin`). **Remove both vars after the first deploy.**
