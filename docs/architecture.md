@@ -50,19 +50,36 @@ render.yaml    Render Blueprint (the whole infra definition)
 6. **Charge actuals** — payments charge confirmed `actual_price` (excluding
    unavailable items) + validated helper fee, never the expected guess.
 7. **Audit log** — every transition appends a StatusChange row.
+8. **Attested handover** — completion requires the customer's OTP entered by
+   the helper (born at purchase, customer-only in the API, 5 wrong attempts
+   lock the endpoint). The code crossing the room is the receipt.
 
 ## Payment provider seam
 
 The state machine never touches a gateway. It calls the `PaymentProvider`
 interface (`apps/payments/providers.py`); `PAYMENT_PROVIDER` picks the
-implementation. Pilot = `ManualUPIProvider` (both sides confirm an
-out-of-band UPI transfer; "held" is a record that gates the machine).
-Razorpay Route slots in behind the same interface — BUT: per RBI's Sept 2025
-Payment Aggregator rules, Route requires ₹40L domestic turnover (GST-3B) or
-₹5L export (FIRC) in FY25/FY26. That gates true gateway escrow behind revenue
-we don't have — industry-wide, every licensed aggregator. The stubs stay as
-the marked seam for that future; the pilot money model is direct/manual UPI
-(see TODO.md). Webhook skeleton verifies signatures and dedupes events.
+implementation.
+
+- **`manual`** (default) — `ManualUPIProvider`: both sides confirm an
+  out-of-band UPI transfer; `held` is a record that gates the machine. Zero
+  dependencies — for demos and local dev.
+- **`razorpay_base`** — `RazorpayBaseProvider`: the platform is merchant of
+  record. `/pay` creates a Razorpay Payment Link into the platform's account
+  and returns `paymentUrl`; the **signed webhook** (`payment_link.paid`) is
+  the only thing that marks money `held`. Release at handover is a ledger
+  flip (the money is already ours); the founders settle helpers from the
+  payout console (`settles_via_platform=True` → a Payout row per completed
+  order, ₹2 flat platform cut clamped to the helper fee, UPI deep link, UTR
+  recorded). Refunds mirror capture state. See `docs/decisions.md` D3.
+- **`razorpay_route`** (stub) — true gateway escrow. Blocked by RBI's Sept
+  2025 PA guidelines: ₹40L domestic turnover (GST-3B) or ₹5L export (FIRC)
+  in FY25/FY26, enforced Jan 1 2026 — every licensed aggregator. The stub
+  stays as the marked seam for that future.
+
+The webhook endpoint (`webhooks/payment/`) verifies the HMAC-SHA256
+signature, dedupes on `provider_event_id` (savepoint-isolated so a retry
+can't poison the transaction), and only ever moves `pending → held` — a
+late webhook cannot resurrect a refunded or cancelled payment.
 
 ## Auth & users
 
