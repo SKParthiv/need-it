@@ -35,7 +35,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({
   orderId,
   onNavigate
 }) => {
-  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage, refreshOrders } = useWebApp();
+  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage, refreshOrders, proposePrice } = useWebApp();
   const order = getOrderById(orderId);
 
   if (!order) {
@@ -98,6 +98,45 @@ export const JobDetail: React.FC<JobDetailProps> = ({
   const [verifying, setVerifying] = useState(false);
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Price confirmation: per-item actual price + optional shelf-photo evidence
+  const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [photoBusy, setPhotoBusy] = useState<Record<string, boolean>>({});
+  const [priceError, setPriceError] = useState('');
+  const [priceBusy, setPriceBusy] = useState<string>('');
+
+  const handleEvidencePhoto = async (itemId: string, file: File | undefined) => {
+    if (!file) return;
+    setPriceError('');
+    setPhotoBusy((b) => ({ ...b, [itemId]: true }));
+    try {
+      const url = await api.uploadEvidencePhoto(file);
+      setPhotoUrls((p) => ({ ...p, [itemId]: url }));
+    } catch (e: any) {
+      setPriceError(e?.message || 'Photo upload failed — you can still send the price without it.');
+    } finally {
+      setPhotoBusy((b) => ({ ...b, [itemId]: false }));
+    }
+  };
+
+  const submitItemPrice = async (itemId: string) => {
+    const raw = priceInputs[itemId];
+    const price = parseInt(raw ?? '', 10);
+    if (!raw || isNaN(price) || price < 0) {
+      setPriceError('Enter the actual shelf price first.');
+      return;
+    }
+    setPriceError('');
+    setPriceBusy(itemId);
+    try {
+      await proposePrice(order.id, itemId, price, photoUrls[itemId]);
+    } catch (e: any) {
+      setPriceError(e?.message || 'Could not send the price. Try again.');
+    } finally {
+      setPriceBusy('');
+    }
+  };
 
   const statusSteps: { status: OrderStatus; label: string }[] = [
     { status: 'accepted', label: 'Accepted' },
@@ -367,35 +406,100 @@ export const JobDetail: React.FC<JobDetailProps> = ({
                   Price Confirmation Before Purchase
                 </h3>
                 <p className="text-xs text-neutral-secondary">
-                  Item price and fee confirmed in chat before buying; customer approval needed if price differs.
+                  Enter the actual shelf price per item and attach a photo as evidence.
+                  The customer approves what they can see — no approval, no purchase.
                 </p>
               </div>
 
-              <div className="p-4 rounded-card bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-neutral-secondary">Expected Total:</span>
-                  <span className="font-mono font-bold">₹170</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-secondary">Actual Store Total:</span>
-                  <span className="font-mono font-bold text-brand-teal">₹180</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-neutral-border dark:border-slate-700">
-                  <span className="text-brand-teal font-semibold">Helper Fee:</span>
-                  <span className="font-mono font-bold text-brand-teal">₹30</span>
-                </div>
-              </div>
+              {order.items.filter((i) => i.status !== 'unavailable').map((item) => (
+                <div
+                  key={item.id}
+                  className="p-4 rounded-card bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 space-y-3"
+                >
+                  <div className="flex justify-between items-baseline text-xs">
+                    <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text">
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span className="font-mono text-neutral-secondary">
+                      est. ₹{item.expectedPrice}
+                    </span>
+                  </div>
 
-              <div className="p-3 rounded-card bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Customer already approved ₹180 in chat. You are cleared to buy!</span>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder={`Actual ₹ (est. ${item.expectedPrice})`}
+                      value={priceInputs[item.id] ?? (item.actualPrice != null ? String(item.actualPrice) : '')}
+                      onChange={(e) => setPriceInputs((p) => ({ ...p, [item.id]: e.target.value }))}
+                      className="w-28 h-10 px-3 rounded-input bg-white dark:bg-slate-900 border border-neutral-border dark:border-slate-700 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-teal"
+                    />
+                    <label
+                      className={`h-10 px-3 rounded-btn border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                        photoUrls[item.id] || item.evidencePhotoUrl
+                          ? 'border-brand-teal text-brand-teal bg-brand-teal-light'
+                          : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:text-brand-teal'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        disabled={photoBusy[item.id]}
+                        onChange={(e) => handleEvidencePhoto(item.id, e.target.files?.[0])}
+                      />
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>
+                        {photoBusy[item.id]
+                          ? 'Uploading…'
+                          : photoUrls[item.id] || item.evidencePhotoUrl
+                            ? '✓ Photo'
+                            : 'Add photo'}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={priceBusy === item.id || photoBusy[item.id]}
+                      onClick={() => submitItemPrice(item.id)}
+                      className="h-10 px-4 rounded-btn bg-brand-teal text-white text-xs font-semibold hover:bg-brand-teal-dark disabled:opacity-50"
+                    >
+                      {priceBusy === item.id ? 'Sending…' : item.priceApproved ? '✓ Approved' : 'Send price'}
+                    </button>
+                  </div>
+
+                  {(photoUrls[item.id] || item.evidencePhotoUrl) && (
+                    <a
+                      href={photoUrls[item.id] || item.evidencePhotoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block"
+                    >
+                      <img
+                        src={photoUrls[item.id] || item.evidencePhotoUrl}
+                        alt={`Shelf evidence for ${item.name}`}
+                        className="h-20 rounded-card object-cover border border-neutral-border dark:border-slate-700"
+                      />
+                    </a>
+                  )}
+
+                  {item.actualPrice != null && (
+                    <p className="text-[11px] text-neutral-secondary">
+                      Sent ₹{item.actualPrice} — {item.priceApproved ? 'customer approved ✓' : 'awaiting customer approval'}
+                    </p>
+                  )}
+                </div>
+              ))}
+
+              {priceError && (
+                <p className="text-xs text-semantic-danger font-medium">{priceError}</p>
+              )}
 
               <button
                 onClick={() => setActiveArea('buy_qr')}
                 className="w-full h-11 rounded-btn bg-brand-teal text-white text-xs font-semibold hover:bg-brand-teal-dark"
               >
-                Proceed to Send Shop QR →
+                Proceed to Payment →
               </button>
             </div>
           )}

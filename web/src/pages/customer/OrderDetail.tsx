@@ -39,7 +39,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
   orderId,
   onNavigate
 }) => {
-  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage } = useWebApp();
+  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage, approvePrices } = useWebApp();
   const order = getOrderById(orderId);
 
   if (!order) {
@@ -95,6 +95,8 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
   const [newMsgText, setNewMsgText] = useState('');
   const [itemApprovalStatus, setItemApprovalStatus] = useState<Record<string, 'approved' | 'declined'>>({});
   const [priceApproved, setPriceApproved] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState('');
   const [ratingStars, setRatingStars] = useState(5);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -587,46 +589,100 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
                 </p>
               </div>
 
-              {/* Side-by-Side Comparison Card (10.4: card shakes horizontally once 6px, 300ms + amber border) */}
-              <div className="p-5 rounded-panel border-2 border-semantic-warning bg-white dark:bg-slate-900 shadow-sm space-y-4 animate-shake">
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800">
-                    <span className="text-[11px] text-neutral-secondary block">Original Estimate</span>
-                    <span className="font-heading font-extrabold text-xl font-mono text-neutral-ink dark:text-neutral-dark-text">
-                      ₹170
-                    </span>
-                  </div>
+              {(() => {
+                const pricedItems = order.items.filter((i) => i.status !== 'unavailable');
+                const allPriced = pricedItems.length > 0 && pricedItems.every((i) => i.actualPrice != null);
+                const allApproved = pricedItems.length > 0 && pricedItems.every((i) => i.priceApproved);
+                const estTotal = pricedItems.reduce((s, i) => s + i.expectedPrice * i.quantity, 0);
+                const actTotal = pricedItems.reduce((s, i) => s + (i.actualPrice ?? i.expectedPrice) * i.quantity, 0);
+                return (
+                  <>
+                    <div className={`p-5 rounded-panel border-2 bg-white dark:bg-slate-900 shadow-sm space-y-4 ${allApproved || priceApproved ? 'border-semantic-success' : 'border-semantic-warning animate-shake'}`}>
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800">
+                          <span className="text-[11px] text-neutral-secondary block">Original Estimate</span>
+                          <span className="font-heading font-extrabold text-xl font-mono text-neutral-ink dark:text-neutral-dark-text">
+                            ₹{estTotal}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-card bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800">
+                          <span className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold block">
+                            Actual Store Total
+                          </span>
+                          <span className="font-heading font-extrabold text-xl font-mono text-amber-900 dark:text-amber-200">
+                            {allPriced ? `₹${actTotal}` : '…'}
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="p-3 rounded-card bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800">
-                    <span className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold block">
-                      Actual Store Total
-                    </span>
-                    <span className="font-heading font-extrabold text-xl font-mono text-amber-900 dark:text-amber-200">
-                      ₹180
-                    </span>
-                  </div>
-                </div>
+                      {/* Per-item lines with the helper's shelf/receipt photos as evidence */}
+                      <div className="space-y-3">
+                        {pricedItems.map((item) => (
+                          <div key={item.id} className="flex items-start gap-3 text-xs">
+                            {item.evidencePhotoUrl && (
+                              <a href={item.evidencePhotoUrl} target="_blank" rel="noreferrer" className="shrink-0">
+                                <img
+                                  src={item.evidencePhotoUrl}
+                                  alt={`Shelf evidence for ${item.name}`}
+                                  className="h-12 w-12 rounded-card object-cover border border-neutral-border dark:border-slate-700"
+                                />
+                              </a>
+                            )}
+                            <div className="flex-1">
+                              <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text block">
+                                {item.name} × {item.quantity}
+                              </span>
+                              <span className="text-neutral-secondary font-mono">
+                                est. ₹{item.expectedPrice} → {item.actualPrice != null ? `₹${item.actualPrice}` : 'helper at the shelf…'}
+                              </span>
+                            </div>
+                            {item.priceApproved && (
+                              <span className="text-semantic-success font-semibold">✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
 
-                <p className="text-xs text-neutral-secondary leading-relaxed">
-                  The notebook price at Bits & Bytes Stationery is ₹60 instead of the estimated ₹50 (+₹10 difference). Helper has paused checkout awaiting your go-ahead.
-                </p>
+                      <p className="text-xs text-neutral-secondary leading-relaxed">
+                        {allPriced
+                          ? 'Check each price against the photo evidence. Nothing is bought until you approve.'
+                          : 'Your helper is still at the shelf — prices appear here as they send them, with photos.'}
+                      </p>
 
-                <div className="pt-2 flex items-center gap-3">
-                  <button
-                    onClick={() => setPriceApproved(true)}
-                    className="flex-1 h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white text-xs font-semibold transition-colors"
-                  >
-                    {priceApproved ? '✓ Price Confirmed & Approved' : 'Approve Actual Price (₹180)'}
-                  </button>
+                      {approveError && (
+                        <p className="text-xs text-semantic-danger font-medium">{approveError}</p>
+                      )}
 
-                  <button
-                    onClick={() => alert('Price rejected. Helper will return items to shelf without charging you.')}
-                    className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink"
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
+                      <div className="pt-2 flex items-center gap-3">
+                        <button
+                          disabled={!allPriced || allApproved || priceApproved || approving}
+                          onClick={async () => {
+                            setApproveError('');
+                            setApproving(true);
+                            try {
+                              await approvePrices(order.id);
+                              setPriceApproved(true);
+                            } catch (e: any) {
+                              setApproveError(e?.message || 'Could not approve right now. Try again.');
+                            } finally {
+                              setApproving(false);
+                            }
+                          }}
+                          className="flex-1 h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                        >
+                          {allApproved || priceApproved
+                            ? '✓ Prices Approved'
+                            : approving
+                              ? 'Approving…'
+                              : allPriced
+                                ? `Approve Actual Price (₹${actTotal})`
+                                : 'Waiting for helper prices…'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 

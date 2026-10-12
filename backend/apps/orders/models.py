@@ -69,6 +69,8 @@ class RequestItem(models.Model):
     alternatives_allowed = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=ItemStatus.choices, default=ItemStatus.PENDING)
     replacement_proposal = models.JSONField(null=True, blank=True)
+    # Photo the helper took at the shelf/receipt — the customer's price evidence.
+    evidence_photo_url = models.URLField(max_length=500, blank=True)
 
 
 class StatusChange(models.Model):

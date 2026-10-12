@@ -203,11 +203,38 @@ export const api = {
     });
   },
 
-  async proposePrice(requestId: string | number, itemId: string | number, actualPrice: number) {
+  async proposePrice(requestId: string | number, itemId: string | number, actualPrice: number, evidencePhotoUrl?: string) {
     return apiFetch(`/requests/${requestId}/items/${itemId}/propose-price/`, {
       method: 'POST',
-      body: JSON.stringify({ actualPrice }),
+      body: JSON.stringify({ actualPrice, evidencePhotoUrl }),
     });
+  },
+
+  async getUploadSignature() {
+    return apiFetch<{ cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string }>(
+      '/uploads/signature/'
+    );
+  },
+
+  /** Direct browser→Cloudinary signed upload. Returns the secure_url to attach
+   *  as evidence — our server signs, Cloudinary stores. */
+  async uploadEvidencePhoto(file: File): Promise<string> {
+    const sig = await this.getUploadSignature();
+    const form = new FormData();
+    form.append('file', file);
+    form.append('api_key', sig.apiKey);
+    form.append('timestamp', String(sig.timestamp));
+    form.append('folder', sig.folder);
+    form.append('signature', sig.signature);
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!resp.ok) {
+      throw new Error('Photo upload failed. Try again.');
+    }
+    const data = await resp.json();
+    return data.secure_url as string;
   },
 
   async approvePrice(requestId: string | number, itemIds?: number[]) {

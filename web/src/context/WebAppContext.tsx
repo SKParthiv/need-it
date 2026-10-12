@@ -47,7 +47,7 @@ interface WebAppContextType {
   sendMessage: (orderId: string, text: string) => Promise<void>;
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
-  proposePrice: (orderId: string, itemId: string, price: number) => Promise<void>;
+  proposePrice: (orderId: string, itemId: string, price: number, evidencePhotoUrl?: string) => Promise<void>;
   approvePrices: (orderId: string) => Promise<void>;
   payOrder: (orderId: string, fee?: number) => Promise<void>;
   confirmHandover: (orderId: string, code: string) => Promise<void>;
@@ -99,6 +99,8 @@ function mapBackendRequestToOrder(req: any): Order {
     category: 'Stationery',
     status: it.status || 'pending',
     replacementProposal: it.replacementProposal || undefined,
+    evidencePhotoUrl: it.evidencePhotoUrl || undefined,
+    priceApproved: it.priceApproved ?? false,
   }));
 
   const itemCost = items.reduce(
@@ -308,11 +310,11 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const proposePrice = async (orderId: string, itemId: string, price: number) => {
+  const proposePrice = async (orderId: string, itemId: string, price: number, evidencePhotoUrl?: string) => {
     const numOrderId = parseInt(orderId, 10);
     const numItemId = parseInt(itemId, 10);
     if (!isNaN(numOrderId) && !isNaN(numItemId)) {
-      await api.proposePrice(numOrderId, numItemId, price);
+      await api.proposePrice(numOrderId, numItemId, price, evidencePhotoUrl);
       refreshOrders();
     }
   };

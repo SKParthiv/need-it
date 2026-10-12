@@ -34,11 +34,12 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | POST | `requests/create/` | customer | `{neededBy, pickupPoint, expectedTotal, isUrgent?, items:[{name, quantity, expectedPrice, notes?, alternativesAllowed?}]}` → `{request}` |
 | GET | `requests/<id>/` | participant | order detail with items + history |
 | POST | `requests/<id>/accept/` | helper | atomic lock; 409 if taken |
-| POST | `requests/<id>/items/<item_id>/propose-price/` | helper | `{actualPrice}` per item |
+| POST | `requests/<id>/items/<item_id>/propose-price/` | helper | `{actualPrice, evidencePhotoUrl?}` — photo must be a `res.cloudinary.com/<our-cloud>` URL (proof it went through our signed upload) |
 | POST | `requests/<id>/approve-price/` | customer | approves all proposed prices |
 | POST | `requests/<id>/items/<item_id>/unavailable/` | helper | marks item unavailable (excluded from charge) |
 | POST | `requests/<id>/items/<item_id>/replacement/` | helper | `{replacementProposal}` |
 | POST | `requests/<id>/items/<item_id>/approve-replacement/` | customer | accepts replacement |
+| GET | `uploads/signature/` | any verified | one signed direct→Cloudinary upload params (`cloudName`, `apiKey`, `timestamp`, `folder`, `signature`); **503 when unconfigured** |
 | POST | `requests/<id>/mark-purchased/` | helper | **gated: payment must be `held` + all prices approved** |
 | POST | `requests/<id>/confirm-handover/` | helper | `{code}` — the customer's 4-digit OTP; correct → `completed` + payment `released` + payout created. Wrong codes counted, locks after 5 |
 | POST | `requests/<id>/cancel/` | participant | refunds pending/held payment; post-purchase needs helper agreement |

@@ -7,11 +7,14 @@ class RequestItemSerializer(serializers.ModelSerializer):
     expectedPrice = serializers.IntegerField(source="expected_price")
     actualPrice = serializers.IntegerField(source="actual_price", allow_null=True, required=False)
     replacementProposal = serializers.JSONField(source="replacement_proposal", allow_null=True, required=False)
+    evidencePhotoUrl = serializers.URLField(source="evidence_photo_url", read_only=True)
+    priceApproved = serializers.BooleanField(source="price_approved", read_only=True)
 
     class Meta:
         model = RequestItem
         fields = ("id", "name", "quantity", "expectedPrice", "actualPrice",
-                  "notes", "status", "replacementProposal")
+                  "notes", "status", "replacementProposal", "evidencePhotoUrl",
+                  "priceApproved")
         read_only_fields = ("id", "actualPrice", "status", "replacementProposal")
 
 

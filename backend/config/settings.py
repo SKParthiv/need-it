@@ -202,6 +202,14 @@ PLATFORM_CUT_PER_ORDER = int(os.environ.get("PLATFORM_CUT_PER_ORDER", "2"))
 PAYMENT_TIMEOUT_MINUTES = int(os.environ.get("PAYMENT_TIMEOUT_MINUTES", "30"))
 ORDER_VALUE_CAP = int(os.environ.get("ORDER_VALUE_CAP", "2000"))
 
+# --- Photo evidence uploads (Cloudinary free tier) ---
+# Direct browser→Cloudinary signed uploads: the API only signs, never proxies.
+# All three unset = uploads disabled (signature endpoint answers 503).
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
+CLOUDINARY_FOLDER = os.environ.get("CLOUDINARY_FOLDER", "needit-evidence")
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True

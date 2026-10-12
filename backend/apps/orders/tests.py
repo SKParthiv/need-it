@@ -224,3 +224,88 @@ class HandoverOtpTests(TestCase):
                                           format="json").status_code, 200)
         resp = self.client.post(url, {"code": self.req.handover_code}, format="json")
         self.assertEqual(resp.status_code, 400)  # completed — not awaiting handover
+
+
+class PhotoEvidenceTests(TestCase):
+    """Price evidence: the helper uploads a shelf/receipt photo straight to
+    Cloudinary (signed by us), then attaches the URL when proposing a price.
+    The customer approves prices they can SEE."""
+
+    CLOUD = "https://res.cloudinary.com/needit-test/"
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.cust = User.objects.create_user("ec", password="x", is_verified_student=True)
+        self.helper = User.objects.create_user("eh", password="x", role="helper",
+                                               is_verified_student=True)
+        self.req = Request.objects.create(
+            customer=self.cust, helper=self.helper, status=OrderStatus.ACCEPTED,
+            needed_by=timezone.now(), pickup_point="Gate", expected_total=100)
+        self.item = RequestItem.objects.create(request=self.req, name="Bread",
+                                               expected_price=40)
+        self.client = APIClient()
+
+    def _propose_url(self):
+        return f"/api/requests/{self.req.id}/items/{self.item.id}/propose-price/"
+
+    def test_signature_503_when_unconfigured(self):
+        self.client.force_authenticate(self.helper)
+        resp = self.client.get("/api/uploads/signature/")
+        self.assertEqual(resp.status_code, 503)
+
+    def test_signature_shape_when_configured(self):
+        import hashlib
+        from django.test import override_settings
+        self.client.force_authenticate(self.helper)
+        with override_settings(CLOUDINARY_CLOUD_NAME="needit-test",
+                               CLOUDINARY_API_KEY="key123",
+                               CLOUDINARY_API_SECRET="secret",
+                               CLOUDINARY_FOLDER="needit-evidence"):
+            data = self.client.get("/api/uploads/signature/").json()
+        expected = hashlib.sha1(
+            f"folder=needit-evidence&timestamp={data['timestamp']}secret".encode()
+        ).hexdigest()
+        self.assertEqual(data["signature"], expected)
+        self.assertEqual(data["cloudName"], "needit-test")
+        self.assertEqual(data["apiKey"], "key123")
+
+    def test_propose_price_stores_evidence_and_customer_sees_it(self):
+        from django.test import override_settings
+        self.client.force_authenticate(self.helper)
+        with override_settings(CLOUDINARY_CLOUD_NAME="needit-test"):
+            resp = self.client.post(self._propose_url(), {
+                "actualPrice": 45,
+                "evidencePhotoUrl": self.CLOUD + "needit-evidence/abc.jpg",
+            }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.evidence_photo_url, self.CLOUD + "needit-evidence/abc.jpg")
+        self.client.force_authenticate(self.cust)
+        data = self.client.get(f"/api/requests/{self.req.id}/").json()
+        self.assertEqual(data["items"][0]["evidencePhotoUrl"],
+                         self.CLOUD + "needit-evidence/abc.jpg")
+
+    def test_propose_price_rejects_foreign_photo_url(self):
+        from django.test import override_settings
+        self.client.force_authenticate(self.helper)
+        with override_settings(CLOUDINARY_CLOUD_NAME="needit-test"):
+            resp = self.client.post(self._propose_url(), {
+                "actualPrice": 45,
+                "evidencePhotoUrl": "https://evil.example.com/fake-receipt.jpg",
+            }, format="json")
+        self.assertEqual(resp.status_code, 400)  # only our uploads count as evidence
+
+    def test_photo_rejected_when_uploads_unconfigured(self):
+        self.client.force_authenticate(self.helper)
+        resp = self.client.post(self._propose_url(), {
+            "actualPrice": 45,
+            "evidencePhotoUrl": self.CLOUD + "needit-evidence/abc.jpg",
+        }, format="json")
+        self.assertEqual(resp.status_code, 400)  # no cloud configured → no uploads happened
+
+    def test_propose_price_without_photo_still_works(self):
+        self.client.force_authenticate(self.helper)
+        resp = self.client.post(self._propose_url(), {"actualPrice": 45}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.evidence_photo_url, "")

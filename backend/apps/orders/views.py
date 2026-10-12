@@ -1,3 +1,6 @@
+import hashlib
+import time
+from django.conf import settings
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -101,12 +104,41 @@ def propose_price(request, pk, item_id):
         return Response({"detail": "Prices can only be proposed for accepted requests."}, status=400)
     item.actual_price = request.data.get("actualPrice")
     item.price_approved = False
-    item.save(update_fields=("actual_price", "price_approved"))
+    photo_url = (request.data.get("evidencePhotoUrl") or "").strip()
+    update_fields = ["actual_price", "price_approved"]
+    if photo_url:
+        cloud = settings.CLOUDINARY_CLOUD_NAME
+        allowed_prefix = f"https://res.cloudinary.com/{cloud}/" if cloud else None
+        if not allowed_prefix or not photo_url.startswith(allowed_prefix):
+            return Response({"detail": "Evidence photo must be a Need It upload."}, status=400)
+        item.evidence_photo_url = photo_url
+        update_fields.append("evidence_photo_url")
+    item.save(update_fields=update_fields)
     from apps.notifications.services import notify
     from apps.notifications.models import Notification
     notify(item.request.customer, Notification.Type.PRICE_CHANGE,
            "Price proposed", f"New price proposed for {item.name}.", order=item.request)
     return Response({"id": item.id, "actualPrice": item.actual_price, "priceApproved": False})
+
+
+@api_view(["GET"])
+def upload_signature(request):
+    """Sign one direct browser→Cloudinary upload. The API never proxies photos —
+    it just vouches for this upload, so storage and bandwidth stay Cloudinary's
+    free-tier problem, not ours."""
+    if not (settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY
+            and settings.CLOUDINARY_API_SECRET):
+        return Response({"detail": "Photo uploads are not configured."}, status=503)
+    timestamp = int(time.time())
+    folder = settings.CLOUDINARY_FOLDER
+    to_sign = f"folder={folder}&timestamp={timestamp}{settings.CLOUDINARY_API_SECRET}"
+    return Response({
+        "cloudName": settings.CLOUDINARY_CLOUD_NAME,
+        "apiKey": settings.CLOUDINARY_API_KEY,
+        "timestamp": timestamp,
+        "folder": folder,
+        "signature": hashlib.sha1(to_sign.encode()).hexdigest(),
+    })
 
 
 @api_view(["POST"])
