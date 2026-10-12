@@ -4,6 +4,10 @@ Base URL: `/api/`. Auth: `Authorization: Token <key>` on every endpoint
 except register/login/verify. JSON in, JSON out. Errors are
 `{"detail": "..."}` with a 4xx status.
 
+`GET /api/health/` is unauthenticated and returns `status`, deployed `version`,
+database status, and a timestamp. Every response includes an `X-Request-ID`
+header; include it when reporting a production failure.
+
 Status vocabulary (exact strings, shared with the clients):
 `open → accepted → purchased → handed_over → completed`, plus `cancelled`.
 Payment: `none → pending → held → released`, plus `failed`, `refunded`.

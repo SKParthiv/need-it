@@ -39,7 +39,8 @@ the upgrade path — it needs real VM admin, so don't start there.
      address works: Senders → add → click the confirmation email).
      Without these, register returns the token in the API response
      (pilot mode — works, but proves nothing).
-3. Deploy. Visit `https://<your-domain>/` → JSON status. Log into
+3. Deploy. Visit `https://<your-domain>/api/health/` → JSON health status
+   (`db: "ok"` confirms the Neon connection). Log into
    `https://<your-domain>/admin/` with the admin creds.
 
 ## 2b. The pipeline (2 min, one time)

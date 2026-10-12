@@ -5,7 +5,12 @@ We do that with a guarded UPDATE that checks rows-affected — so two people
 acting at once can never both win, and an illegal transition can never write.
 """
 from django.db import transaction
+import logging
 from .models import OrderStatus, Request, RequestItem, StatusChange, ALLOWED_TRANSITIONS
+from config.middleware import get_request_id
+
+
+logger = logging.getLogger(__name__)
 
 
 class IllegalTransition(Exception):
@@ -29,6 +34,14 @@ def _guarded_move(request_id, expect, to, actor, note=""):
             raise ConflictLost(f"request {request_id} is no longer {expect}")
         StatusChange.objects.create(request_id=request_id, from_status=expect,
                                     to_status=to, actor=actor, note=note)
+    logger.info(
+        "order transition order_id=%s from=%s to=%s actor=%s request_id=%s",
+        request_id,
+        expect,
+        to,
+        getattr(actor, "pk", None) or "-",
+        get_request_id(),
+    )
     return Request.objects.get(pk=request_id)
 
 
