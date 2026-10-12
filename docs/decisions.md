@@ -6,6 +6,30 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D7 — Pilot money: direct UPI customer→helper, no commission yet (2026-10-12)
+
+**Decision:** The pilot platform touches **zero money**. After price
+approval, the customer pays the helper directly (UPI QR rendered from the
+helper's `upi_id`); the helper confirms receipt, then shops. No Razorpay,
+no KYC, no commission in v1. The planned commission (flat ₹2 per order,
+charged to the *helper* via Razorpay) is deferred to a post-pilot launch —
+it reuses the existing provider seam (`RazorpayBaseProvider`, PR #22).
+Supersedes the collection half of D3 for the pilot; the OTP handover and
+payout ledger stay.
+
+**Why:** RBI rules price gateway escrow out of reach (D4), and collecting
+order money through the platform adds KYC, webhooks, and refund handling to
+a launch that needs none of them. Direct UPI matches how students already
+pay each other, costs ₹0, and the helper-confirms-before-shopping step
+keeps "helpers never front cash" true without any platform in the middle.
+
+**Cost:** The platform has no money-side leverage — a helper paid-but-ghosts
+case has no refund rail. Enforcement is entirely social: the trust system
+(problem-count blocks, admin-tunable thresholds). Accepted consciously for
+pilot scale; revisit at commission launch.
+
+---
+
 ## D6 — Email provider: SendGrid, not Brevo (2026-10-12)
 
 **Decision:** Verification emails go through SendGrid's HTTP API
