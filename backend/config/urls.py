@@ -9,9 +9,11 @@ def root_view(request):
     return JsonResponse({
         "status": "online",
         "service": "Need It Backend API",
-        "message": "The web application frontend is running on port 3000.",
-        "website_url": "http://localhost:3000",
+        "api": "/api/",
         "admin_url": "/admin/",
+        # Points at the web app once it has a public URL (Cloudflare Pages);
+        # null until PUBLIC_WEB_URL is set — never a localhost lie in prod.
+        "website_url": os.environ.get("PUBLIC_WEB_URL", "").strip() or None,
     })
 
 

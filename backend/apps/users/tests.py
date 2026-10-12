@@ -91,6 +91,68 @@ class ProductionFlowTests(APITestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("https://api.example.com/api/auth/verify/?token=", mail.outbox[0].body)
 
+    def test_register_survives_email_failure(self):
+        """A broken email provider must NOT 500 the register — the account
+        already exists by then. 201 with email_sent=False instead."""
+        from unittest.mock import patch
+        with self.settings(EMAIL_CONFIGURED=True,
+                           PUBLIC_API_BASE_URL="https://api.example.com"), \
+             patch("apps.users.views.send_mail", side_effect=Exception("provider down")):
+            resp = self.client.post("/api/auth/register/", {
+                "email": "unlucky@sastra.ac.in", "password": "Passw0rd!x",
+                "role": "customer", "policy_accept": True,
+            }, format="json")
+        self.assertEqual(resp.status_code, 201)
+        self.assertFalse(resp.json()["email_sent"])
+        self.assertTrue(User.objects.filter(email="unlucky@sastra.ac.in").exists())
+
+    def test_resend_verification_pilot_returns_token(self):
+        User.objects.create_user(username="pilot@sastra.ac.in",
+                                 email="pilot@sastra.ac.in", password="pw")
+        resp = self.client.post("/api/auth/resend-verification/",
+                                {"email": "pilot@sastra.ac.in"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("verification_token", resp.json())
+
+    def test_resend_verification_unknown_email_is_generic(self):
+        resp = self.client.post("/api/auth/resend-verification/",
+                                {"email": "ghost@sastra.ac.in"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("verification_token", resp.json())
+
+    def test_resend_verification_verified_user_is_generic(self):
+        User.objects.create_user(username="done@sastra.ac.in",
+                                 email="done@sastra.ac.in", password="pw",
+                                 is_verified_student=True)
+        resp = self.client.post("/api/auth/resend-verification/",
+                                {"email": "done@sastra.ac.in"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("verification_token", resp.json())
+
+    def test_resend_verification_sends_email_when_configured(self):
+        from django.core import mail
+        User.objects.create_user(username="wait@sastra.ac.in",
+                                 email="wait@sastra.ac.in", password="pw")
+        with self.settings(EMAIL_CONFIGURED=True,
+                           PUBLIC_API_BASE_URL="https://api.example.com",
+                           EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+            resp = self.client.post("/api/auth/resend-verification/",
+                                    {"email": "wait@sastra.ac.in"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["wait@sastra.ac.in"])
+
+    def test_resend_verification_503s_honestly_on_provider_failure(self):
+        from unittest.mock import patch
+        User.objects.create_user(username="down@sastra.ac.in",
+                                 email="down@sastra.ac.in", password="pw")
+        with self.settings(EMAIL_CONFIGURED=True,
+                           PUBLIC_API_BASE_URL="https://api.example.com"), \
+             patch("apps.users.views.send_mail", side_effect=Exception("provider down")):
+            resp = self.client.post("/api/auth/resend-verification/",
+                                    {"email": "down@sastra.ac.in"}, format="json")
+        self.assertEqual(resp.status_code, 503)
+
 
 class EnsureAdminCommandTests(APITestCase):
     def test_creates_superuser_from_env(self):
