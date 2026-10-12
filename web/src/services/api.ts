@@ -287,7 +287,7 @@ export const api = {
   },
 
   async pay(orderId: string | number, helperFee = 30) {
-    return apiFetch<{ status: string; total: number }>(`/orders/${orderId}/pay/`, {
+    return apiFetch<{ status: string; total: number; paymentUrl?: string | null }>(`/orders/${orderId}/pay/`, {
       method: 'POST',
       body: JSON.stringify({ helperFee }),
     });

@@ -210,6 +210,13 @@ CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
 CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
 CLOUDINARY_FOLDER = os.environ.get("CLOUDINARY_FOLDER", "needit-evidence")
 
+# --- Razorpay (merchant of record, BASE account — no Route until ₹40L) ---
+# Blank keys = the razorpay_base provider refuses to create charges.
+# PAYMENT_PROVIDER=razorpay_base flips collection from manual UPI to gateway.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True

@@ -20,6 +20,7 @@ class Payment(models.Model):
     currency = models.CharField(max_length=3, default="INR")
     provider = models.CharField(max_length=20, default="manual")
     provider_ref = models.CharField(max_length=120, blank=True)  # gateway order/payment id
+    payment_url = models.CharField(max_length=500, blank=True)  # gateway Payment Link the customer opens
     customer_confirmed = models.BooleanField(default=False)
     helper_confirmed = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=64, unique=True)

@@ -50,9 +50,9 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | Method | Path | Who | Body → Response |
 | --- | --- | --- | --- |
 | GET | `orders/<id>/payment-status/` | participant | — → `{status, item_cost, helper_fee, total}` |
-| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total}`. Requires accepted order + all available items price-approved. Idempotent. |
-| POST | `orders/<id>/confirm-payment/` | both | each side confirms the UPI transfer; when both have → `held` |
-| POST | `webhooks/payment/` | Razorpay only | signature-verified, event-id deduped; inactive in pilot |
+| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total, paymentUrl?}`. Requires accepted order + all available items price-approved. Idempotent. `paymentUrl` present in gateway mode (`razorpay_base`) — open it, customer pays there |
+| POST | `orders/<id>/confirm-payment/` | both | manual mode: each side confirms the UPI transfer; both → `held`. **400 in gateway mode** — the signed webhook is the only confirmer |
+| POST | `webhooks/payment/` | Razorpay only | HMAC-SHA256 signature-verified, event-id deduped; `payment_link.paid` flips the order's payment `pending → held` (the escrow gate) |
 
 ## Chat
 

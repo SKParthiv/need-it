@@ -330,8 +330,15 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const payOrder = async (orderId: string, fee = 30) => {
     const numOrderId = parseInt(orderId, 10);
     if (!isNaN(numOrderId)) {
-      await api.pay(numOrderId, fee);
-      await api.confirmPayment(numOrderId);
+      const resp = await api.pay(numOrderId, fee);
+      if (resp.paymentUrl) {
+        // Gateway mode (merchant of record): the customer pays the Razorpay
+        // link; the signed webhook marks the payment held — no manual confirm.
+        window.open(resp.paymentUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        // Manual UPI pilot: both sides still confirm the out-of-band transfer.
+        await api.confirmPayment(numOrderId);
+      }
       refreshOrders();
     }
   };
