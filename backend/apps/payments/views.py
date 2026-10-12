@@ -1,7 +1,9 @@
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
-from .models import Payment
-from .services import confirm_payment, create_payment
+from .models import Payment, Payout, PayoutStatus
+from .services import (confirm_payment, create_payment, mark_paid,
+                       PayoutError, PayoutNotFound, PayoutConflict)
 from apps.orders.models import OrderStatus, Request, RequestItem
 from django.conf import settings
 
@@ -65,3 +67,72 @@ def confirm(request, order_id):
     except ValueError as error:
         return Response({"detail": str(error)}, status=403)
     return Response({"status": payment.status})
+
+
+# --- Payouts (merchant of record) ------------------------------------------------
+
+def _payout_dict(p):
+    """camelCase to match the rest of the API. upiId is the helper's LIVE
+    profile value — the account money actually goes to — with the creation-time
+    snapshot kept alongside for audit."""
+    live_upi = getattr(p.helper, "upi_id", "") or p.upi_id
+    return {
+        "id": p.id,
+        "orderId": p.request_id,
+        "helper": {
+            "id": p.helper_id,
+            "name": p.helper.get_full_name() or p.helper.email,
+            "email": p.helper.email,
+        },
+        "upiId": live_upi,
+        "upiIdAtCreation": p.upi_id,
+        "itemCost": p.item_cost,
+        "helperFee": p.helper_fee,
+        "platformCut": p.platform_cut,
+        "amount": p.amount,
+        "status": p.status,
+        "utr": p.utr,
+        "paidBy": p.paid_by.email if p.paid_by else None,
+        "createdAt": p.created_at.isoformat(),
+        "paidAt": p.paid_at.isoformat() if p.paid_at else None,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_payouts(request):
+    status_filter = request.GET.get("status", PayoutStatus.DUE)
+    payouts = Payout.objects.select_related("helper", "paid_by")
+    if status_filter != "all":
+        payouts = payouts.filter(status=status_filter)
+    newest_first = status_filter != PayoutStatus.DUE
+    payouts = payouts.order_by("-paid_at" if newest_first else "created_at")
+    return Response([_payout_dict(p) for p in payouts])
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def admin_mark_payout_paid(request, payout_id):
+    try:
+        payout = mark_paid(payout_id, request.user, request.data.get("utr", ""))
+    except PayoutNotFound as error:
+        return Response({"detail": str(error)}, status=404)
+    except PayoutConflict as error:
+        return Response({"detail": str(error)}, status=409)
+    except PayoutError as error:
+        return Response({"detail": str(error)}, status=400)
+    return Response(_payout_dict(payout))
+
+
+@api_view(["GET"])
+def earnings(request):
+    """The logged-in helper's own settlement view: what's due, what's paid."""
+    payouts = (Payout.objects.filter(helper=request.user)
+               .select_related("helper", "paid_by").order_by("-created_at"))
+    due_total = sum(p.amount for p in payouts if p.status == PayoutStatus.DUE)
+    paid_total = sum(p.amount for p in payouts if p.status == PayoutStatus.PAID)
+    return Response({
+        "dueTotal": due_total,
+        "paidTotal": paid_total,
+        "payouts": [_payout_dict(p) for p in payouts],
+    })

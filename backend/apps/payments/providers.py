@@ -1,8 +1,10 @@
 """
-The escrow provider abstraction. The order state machine never talks to a
+The payment provider abstraction. The order state machine never talks to a
 gateway directly — it calls this interface, and the active provider is chosen
-by PAYMENT_PROVIDER in settings. Pilot runs on ManualUPIProvider; when Razorpay
-Route KYC clears, flip one env var and the machine behaves identically.
+by PAYMENT_PROVIDER in settings. Demos run on ManualUPIProvider; production
+runs the merchant-of-record provider (platform collects, founders settle
+payouts). True escrow (Razorpay Route) is RBI turnover-gated — see
+docs/decisions.md.
 """
 from django.conf import settings
 import logging
@@ -30,6 +32,11 @@ def _set_status(payment, status, update_fields):
 
 class PaymentProvider:
     name = "base"
+    # True when this provider collects into the PLATFORM's account (merchant of
+    # record) — completing an order then creates a Payout owed to the helper.
+    # False when money moves customer→helper directly (manual UPI) or is split
+    # at the gateway (Route): no platform settlement exists.
+    settles_via_platform = False
     def create_charge(self, payment: Payment) -> dict:
         raise NotImplementedError
     def release(self, payment: Payment) -> dict:
@@ -91,8 +98,15 @@ class RazorpayRouteProvider(PaymentProvider):
         raise NotImplementedError("wire up after Razorpay Route KYC")
 
 
+_PROVIDERS = {
+    ManualUPIProvider.name: ManualUPIProvider,
+    RazorpayRouteProvider.name: RazorpayRouteProvider,
+}
+
+
 def get_provider() -> PaymentProvider:
-    return {
-        "manual": ManualUPIProvider,
-        "razorpay": RazorpayRouteProvider,
-    }[settings.PAYMENT_PROVIDER]()
+    return provider_by_name(settings.PAYMENT_PROVIDER)
+
+
+def provider_by_name(name: str) -> PaymentProvider:
+    return _PROVIDERS[name]()

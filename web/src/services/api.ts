@@ -283,4 +283,27 @@ export const api = {
       body: JSON.stringify({ text }),
     });
   },
+
+  // --- Payouts (merchant of record) ---
+  async getAdminPayouts(status: 'due' | 'paid' | 'all' = 'due') {
+    return apiFetch<any[]>(`/admin/payouts/?status=${status}`);
+  },
+
+  async markPayoutPaid(payoutId: number, utr: string) {
+    return apiFetch<any>(`/admin/payouts/${payoutId}/mark-paid/`, {
+      method: 'POST',
+      body: JSON.stringify({ utr }),
+    });
+  },
+
+  async getEarnings() {
+    return apiFetch<{ dueTotal: number; paidTotal: number; payouts: any[] }>('/earnings/');
+  },
+
+  async updateMe(data: { upi_id?: string; hostel_block?: string; pickup_point?: string }) {
+    return apiFetch('/me/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
 };

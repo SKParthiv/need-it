@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { StatusChip } from '../../components/common/StatusChip';
 import { VerifiedBadge } from '../../components/common/VerifiedBadge';
+import { PayoutsPanel } from './PayoutsPanel';
 import {
   mockClubReports,
   mockClubUsers,
@@ -87,6 +88,7 @@ export const ClubConsole: React.FC<ClubConsoleProps> = ({
             { id: 'shops', label: 'Shop Moderation', path: '/club/shops' },
             { id: 'broadcast', label: 'Broadcast', path: '/club/broadcast' },
             { id: 'insights', label: 'Insights', path: '/club/insights' },
+            { id: 'payouts', label: 'Payouts', path: '/club/payouts' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -690,6 +692,9 @@ export const ClubConsole: React.FC<ClubConsoleProps> = ({
           </div>
         </div>
       )}
+
+      {/* 10. HELPER PAYOUTS (`/club/payouts`) — merchant-of-record settlements */}
+      {section === 'payouts' && <PayoutsPanel />}
 
       {/* 9. INSIGHTS & ANALYTICS (`/club/insights`) */}
       {section === 'insights' && (

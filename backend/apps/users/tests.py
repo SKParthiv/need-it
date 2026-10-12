@@ -1,8 +1,10 @@
 from django.urls import reverse
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from .models import User
 
 
+@override_settings(COLLEGE_EMAIL_DOMAINS=[])  # don't inherit the local .env allowlist
 class AuthFlowTests(APITestCase):
     def test_register_verify_login(self):
         response = self.client.post("/api/auth/register/", {
@@ -40,6 +42,23 @@ class AuthFlowTests(APITestCase):
         self.client.force_authenticate(user=user)
         response = self.client.post("/api/requests/create/", {}, format="json")
         self.assertEqual(response.status_code, 403)
+
+    @override_settings(COLLEGE_EMAIL_DOMAINS=["sastra.ac.in"])
+    def test_domain_allowlist_enforced_when_configured(self):
+        response = self.client.post("/api/auth/register/", {
+            "email": "student@campus.edu",
+            "password": "safe-password",
+            "role": "customer",
+            "policy_accept": True,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        response = self.client.post("/api/auth/register/", {
+            "email": "student@sastra.ac.in",
+            "password": "safe-password",
+            "role": "customer",
+            "policy_accept": True,
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
 
 
 class ProductionFlowTests(APITestCase):
@@ -102,3 +121,29 @@ class EnsureAdminCommandTests(APITestCase):
         user.refresh_from_db()
         self.assertTrue(user.is_superuser)
         self.assertTrue(user.check_password("original"))  # password untouched
+
+
+class ProfilePatchTests(APITestCase):
+    def test_me_patch_sets_upi_id(self):
+        user = User.objects.create_user("p1", password="x")
+        self.client.force_authenticate(user=user)
+        resp = self.client.patch("/api/me/", {"upi_id": "student@okhdfc"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.upi_id, "student@okhdfc")
+
+    def test_me_patch_rejects_bad_upi_id(self):
+        user = User.objects.create_user("p2", password="x")
+        self.client.force_authenticate(user=user)
+        resp = self.client.patch("/api/me/", {"upi_id": "not-a-upi-id"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        user.refresh_from_db()
+        self.assertEqual(user.upi_id, "")
+
+    def test_me_patch_cannot_escalate(self):
+        user = User.objects.create_user("p3", password="x", role="customer")
+        self.client.force_authenticate(user=user)
+        resp = self.client.patch("/api/me/", {"role": "helper", "is_staff": True}, format="json")
+        user.refresh_from_db()
+        self.assertEqual(user.role, "customer")  # whitelist silently drops the rest
+        self.assertFalse(user.is_staff)
