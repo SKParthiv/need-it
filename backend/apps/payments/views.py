@@ -54,7 +54,8 @@ def pay(request, order_id):
             )
         }, status=400)
     payment = create_payment(order, item_cost, helper_fee, str(order.id))
-    return Response({"status": payment.status, "total": payment.total}, status=201)
+    return Response({"status": payment.status, "total": payment.total,
+                     "paymentUrl": payment.payment_url or None}, status=201)
 
 
 @api_view(["POST"])
@@ -62,6 +63,10 @@ def confirm(request, order_id):
     payment = Payment.objects.filter(request_id=order_id).select_related("request").first()
     if not payment:
         return Response({"detail": "Payment not found."}, status=404)
+    if payment.provider == "razorpay_base":
+        return Response(
+            {"detail": "Gateway payments confirm automatically after capture — no manual confirm."},
+            status=400)
     try:
         payment = confirm_payment(payment, request.user)
     except ValueError as error:

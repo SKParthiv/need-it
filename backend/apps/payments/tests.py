@@ -5,8 +5,26 @@ from unittest.mock import patch
 from apps.orders.models import Request
 from apps.payments.models import Payment, PaymentStatus
 from apps.payments import services
+from apps.payments.providers import RazorpayBaseProvider
 
 User = get_user_model()
+
+
+class _FakeRazorpayClient:
+    """No network in tests — records calls, answers like the gateway."""
+
+    def __init__(self):
+        import types
+        self.calls = []
+        self.payment_link = types.SimpleNamespace(
+            create=lambda data: self.calls.append(("link.create", data)) or {
+                "id": "plink_test1", "short_url": "https://rzp.io/l/test1"},
+            fetch=lambda lid: {"id": lid, "payments": [{"id": "pay_test1"}]},
+        )
+        self.payment = types.SimpleNamespace(
+            refund=lambda pid, data: self.calls.append(("payment.refund", pid, data))
+            or {"id": "rfnd_1"},
+        )
 
 
 class PaymentTests(TestCase):
@@ -254,3 +272,153 @@ class PayoutFlowTests(TestCase):
         resp = self.client.get("/api/earnings/")
         self.assertEqual(resp.json()["dueTotal"], 0)
         self.assertEqual(resp.json()["payouts"], [])
+
+
+class RazorpayBaseTests(TestCase):
+    """Merchant-of-record collection on a base Razorpay account. The whole
+    trust model: only the SIGNED webhook marks money held; release is a ledger
+    flip (the money is already ours); refunds go back through the gateway."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from apps.orders.models import OrderStatus, RequestItem
+        self.cust = User.objects.create_user("rc", password="x")
+        self.helper = User.objects.create_user("rh", password="x")
+        self.order = Request.objects.create(
+            customer=self.cust, helper=self.helper, status=OrderStatus.ACCEPTED,
+            needed_by=timezone.now(), pickup_point="Main Gate", expected_total=100)
+        RequestItem.objects.create(request=self.order, name="Bread", expected_price=40,
+                                   actual_price=45, price_approved=True)
+        self.client = APIClient()
+        self.fake = _FakeRazorpayClient()
+        self._patcher = patch.object(
+            RazorpayBaseProvider, "_client", lambda _self: self.fake)
+        self._patcher.start()
+        self.addCleanup(self._patcher.stop)
+
+    def _pay(self):
+        from django.test import override_settings
+        self.client.force_authenticate(self.cust)
+        with override_settings(PAYMENT_PROVIDER="razorpay_base"):
+            return self.client.post(f"/api/orders/{self.order.id}/pay/",
+                                    {"helperFee": 20}, format="json")
+
+    def _webhook(self, payload: dict, secret="whsec"):
+        import hashlib, hmac, json
+        body = json.dumps(payload).encode()
+        sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        return self.client.post("/api/webhooks/payment/", body,
+                                content_type="application/json",
+                                HTTP_X_RAZORPAY_SIGNATURE=sig)
+
+    @staticmethod
+    def _paid_event(event_id="evt_1"):
+        return {"id": event_id, "event": "payment_link.paid",
+                "payload": {"payment_link": {"entity": {"id": "plink_test1"}}}}
+
+    def test_pay_creates_link_and_returns_url(self):
+        from django.test import override_settings
+        with override_settings(PAYMENT_PROVIDER="razorpay_base"):
+            resp = self._pay()
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["paymentUrl"], "https://rzp.io/l/test1")
+        p = Payment.objects.get(request=self.order)
+        self.assertEqual(p.status, PaymentStatus.PENDING)
+        self.assertEqual(p.provider, "razorpay_base")
+        self.assertEqual(p.provider_ref, "plink_test1")
+        # (65 total = 45 bread + 20 fee) charged in paise
+        self.assertEqual(self.fake.calls[0][1]["amount"], 65 * 100)
+
+    def test_webhook_paid_marks_held(self):
+        from django.test import override_settings
+        self._pay()
+        with override_settings(PAYMENT_PROVIDER="razorpay_base",
+                               RAZORPAY_WEBHOOK_SECRET="whsec"):
+            resp = self._webhook(self._paid_event())
+        self.assertEqual(resp.status_code, 200)
+        p = Payment.objects.get(request=self.order)
+        self.assertEqual(p.status, PaymentStatus.HELD)
+
+    def test_webhook_retry_is_idempotent(self):
+        from django.test import override_settings
+        self._pay()
+        with override_settings(PAYMENT_PROVIDER="razorpay_base",
+                               RAZORPAY_WEBHOOK_SECRET="whsec"):
+            self._webhook(self._paid_event())
+            resp = self._webhook(self._paid_event())  # same event id — a retry
+        self.assertEqual(resp.content.decode(), "already processed")
+        self.assertEqual(Payment.objects.get(request=self.order).status,
+                         PaymentStatus.HELD)
+
+    def test_webhook_bad_signature_rejected(self):
+        from django.test import override_settings
+        self._pay()
+        with override_settings(PAYMENT_PROVIDER="razorpay_base",
+                               RAZORPAY_WEBHOOK_SECRET="whsec"):
+            resp = self._webhook(self._paid_event("evt_bad"), secret="wrong")
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(Payment.objects.get(request=self.order).status,
+                         PaymentStatus.PENDING)  # untouched
+
+    def test_webhook_silent_when_secret_unset(self):
+        self._pay()
+        resp = self._webhook(self._paid_event("evt_x"))
+        self.assertEqual(resp.status_code, 403)  # no secret configured = trust nothing
+
+    def test_webhook_ignored_in_manual_mode(self):
+        from django.test import override_settings
+        with override_settings(PAYMENT_PROVIDER="manual", RAZORPAY_WEBHOOK_SECRET="whsec"):
+            resp = self._webhook(self._paid_event("evt_m"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_held_payment_unlocks_purchase_and_release_is_a_ledger_flip(self):
+        from apps.orders import services as order_services
+        from django.test import override_settings
+        self._pay()
+        with override_settings(PAYMENT_PROVIDER="razorpay_base",
+                               RAZORPAY_WEBHOOK_SECRET="whsec"):
+            self._webhook(self._paid_event())
+        # Escrow gate opens
+        order_services.mark_purchased(self.order.id, self.helper)
+        self.order.refresh_from_db()
+        # Handover releases WITHOUT any gateway call (MoR: money is already ours)
+        self.fake.calls.clear()
+        order_services.confirm_handover(self.order.id, self.helper, self.order.handover_code)
+        self.assertEqual(self.fake.calls, [])
+        p = Payment.objects.get(request=self.order)
+        self.assertEqual(p.status, PaymentStatus.RELEASED)
+        # ...and the platform owes the helper a payout (settles_via_platform)
+        from apps.payments.models import Payout
+        payout = Payout.objects.get(request=self.order)
+        self.assertEqual(payout.amount, 45 + 20 - 2)  # cost + fee - cut
+
+    def test_refund_held_goes_back_through_gateway(self):
+        from django.test import override_settings
+        self._pay()
+        with override_settings(PAYMENT_PROVIDER="razorpay_base",
+                               RAZORPAY_WEBHOOK_SECRET="whsec"):
+            self._webhook(self._paid_event())
+        payment = Payment.objects.get(request=self.order)
+        with override_settings(PAYMENT_PROVIDER="razorpay_base"):
+            services.refund(payment)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, PaymentStatus.REFUNDED)
+        self.assertIn(("payment.refund", "pay_test1", {"amount": 65 * 100}),
+                      self.fake.calls)
+
+    def test_refund_pending_never_touches_gateway(self):
+        self._pay()
+        payment = Payment.objects.get(request=self.order)
+        self.fake.calls.clear()
+        from django.test import override_settings
+        with override_settings(PAYMENT_PROVIDER="razorpay_base"):
+            services.refund(payment)  # pending: nothing was captured, nothing to refund
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, PaymentStatus.REFUNDED)
+        self.assertEqual(self.fake.calls, [])
+
+    def test_manual_confirm_endpoint_refused_in_gateway_mode(self):
+        self._pay()
+        self.client.force_authenticate(self.cust)
+        resp = self.client.post(f"/api/orders/{self.order.id}/confirm-payment/")
+        self.assertEqual(resp.status_code, 400)  # the webhook confirms, not people
