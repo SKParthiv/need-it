@@ -41,7 +41,7 @@ and the guarded write means a stale or double action can never corrupt state.
 ## Money rules
 
 - Charge the **actual confirmed amount** (item cost + helper fee), never the expected-price guess.
-- The **gateway** holds the money (Razorpay Route), never us. Pilot runs on `ManualUPIProvider`; flip `PAYMENT_PROVIDER` when KYC lands.
+- The **gateway** holds the money, never us — in the ₹40L-turnover future (Razorpay Route, RBI-gated). Pilot runs on `ManualUPIProvider` (both sides confirm an out-of-band UPI transfer).
 - Handover confirm = attestation. The customer's confirm copy: **"I've received my items — release payment."**
 - Webhooks: verify signature; dedupe on gateway event ID (retries are idempotent).
 
