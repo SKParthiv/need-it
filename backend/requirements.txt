@@ -9,3 +9,4 @@ whitenoise==6.9.0
 razorpay>=1.4
 # boto3>=1.34   # S3-compatible object storage
 django-anymail==13.1
+google-auth>=2.30
