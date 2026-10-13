@@ -62,7 +62,7 @@ States: `open → accepted → purchased → handed_over → completed`
 | 3 | Helper | Accept | `POST /api/requests/<id>/accept/` | `accepted` — atomic lock; loser gets 409 |
 | 4 | Helper | Per item: propose actual price **with a shelf/receipt photo** | photo: §5, then `POST /api/requests/<id>/items/<item_id>/propose-price/` | `accepted`, prices `pending` |
 | 5 | Customer | See photos + prices, approve (or reject → helper revises) | `POST .../items/<item_id>/approve-price/` | all items approved → order payable |
-| 6 | Customer | **Pay the helper directly**: app shows the helper's UPI QR (rendered client-side from `helper.upi_id`, amount = approved total); customer pays in their own UPI app, then taps "I've paid" | `POST /api/orders/<id>/pay/` | payment `pending` |
+| 6 | Customer | **Pay the helper directly**: when all items are approved, the server posts a **payment card message into the order chat** carrying `upi_id`, the approved total, and a ready-made `upi://` deep link. The customer taps **"Pay in UPI app"** (deep link opens their UPI app with payee + amount pre-filled) or scans the QR rendered from the same payload, then taps "I've paid" | `POST /api/orders/<id>/pay/` | payment `pending` |
 | 7 | Helper | Confirm the money actually arrived in their UPI app | `POST /api/orders/<id>/confirm-payment/` | payment `held` |
 | 8 | Helper | Shop, then mark purchased — **the OTP is born here** | `POST /api/requests/<id>/mark-purchased/` | `purchased` |
 | 9 | Customer | Meet the helper, **show** the 4-digit OTP (rendered only to the customer) | `GET /api/requests/<id>/` | — |
@@ -86,7 +86,11 @@ Rules the backend enforces (clients must respect, never duplicate):
 the same Cloudinary pipe as price evidence (§5) — the client uploads,
 then posts the returned URL as the message attachment. Chat exists from
 `accepted` onward; it's the coordination surface (shop names, substitutes,
-meet point).
+meet point). **Chat is the center of the order UI**: state changes surface
+as cards in the thread, and the payment moment lives here too — a
+server-posted **payment card** message (type `payment_card`, payload:
+`upi_id`, `amount`, `upi_deep_link`) appears when prices are approved
+(§3 step 6).
 
 ## 5. Photos (Cloudinary, direct upload)
 

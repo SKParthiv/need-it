@@ -49,6 +49,9 @@ longer a launch blocker (commission version is post-pilot).
 
 - `POST /api/auth/google/` — verify Google ID token, require
   `hd == sastra.ac.in`, link-or-create account born verified (userflow-v2 §2).
+- Payment card chat message: server posts a `payment_card` message (upi_id,
+  amount, ready `upi://` deep link) into the order chat when all prices are
+  approved (userflow-v2 §3 step 6, §4).
 - Trust system v1 (userflow-v2 §7): two-direction ratings + problem-count
   blocks with admin-tunable thresholds (`/admin/`, no redeploy).
 - Chat image attachments via the existing Cloudinary signature pipe.
