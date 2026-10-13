@@ -158,6 +158,13 @@ def cancel(request_id, actor, note="", helper_agree=False):
         payment = Payment.objects.select_for_update().filter(request_id=request_id).first()
         if payment and payment.status in (PaymentStatus.PENDING, PaymentStatus.HELD):
             refund(payment)
+        # Flake: the assigned HELPER cancels after accepting — counts toward
+        # the trust block (idempotent per order).
+        if req.helper_id is not None and actor.id == req.helper_id:
+            from apps.trust.services import record_problem
+            from apps.trust.models import ProblemEvent
+            record_problem(req.helper, ProblemEvent.Kind.FLAKE, order=req,
+                           note="helper cancelled after accepting")
         return _guarded_move(request_id, req.status, OrderStatus.CANCELLED, actor, note or "cancelled")
 
 
@@ -185,6 +192,12 @@ def sweep_stale_accepted(now=None):
         payment = Payment.objects.filter(request_id=req.id).first()
         if payment and payment.status == PaymentStatus.PENDING:
             continue  # money may be mid-flight; only idle UNPAID orders release
+        # Flake: accepted then went idle past the payment timeout.
+        if req.helper_id is not None:
+            from apps.trust.services import record_problem
+            from apps.trust.models import ProblemEvent
+            record_problem(req.helper, ProblemEvent.Kind.FLAKE, order=req,
+                           note="stale accept auto-released")
         _guarded_move(req.id, OrderStatus.ACCEPTED, OrderStatus.OPEN,
                       None, "auto-released: no payment within timeout")
         Request.objects.filter(pk=req.id).update(helper=None)

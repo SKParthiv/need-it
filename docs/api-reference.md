@@ -23,7 +23,7 @@ Payment: `none → pending → held → released`, plus `failed`, `refunded`.
 | POST | `auth/verify-email/` | anyone | `{token}` → `{user}` (is_verified_student=true) |
 | POST | `auth/login/` | anyone | `{email, password}` → `{token, user}` |
 | POST | `auth/logout/` | authed | — → 204, token destroyed |
-| GET | `me/` | authed | — → `{user}` |
+| GET | `me/` | authed | — → `{user}` incl. trust summary (`problems`, `blocked`) |
 
 Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 
@@ -85,8 +85,20 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | POST | `reports/file/` | order participant | `{orderId, reason, details?}` |
 | GET | `reports/` | authed | my filed reports |
 
-Resolution is manual by founders in `/admin/` — there is no automated
-punishment pipeline in v1.
+Resolution is manual by founders in `/admin/`; the blame actions there
+(resolve against customer/helper) feed the trust problem counts below.
+
+## Trust
+
+| Method | Path | Who | Body |
+| --- | --- | --- | --- |
+| POST | `orders/<id>/rate/` | order participant, after `completed` | `{stars 1-5, note?}` → 201; one per side per order (409 on repeat) |
+
+Problem counts block automatically: helpers at the threshold can't accept,
+customers can't post (403 with reason). Sources: admin-confirmed reports
+(blame actions on the Reports admin page) + flakes (helper cancels after
+accepting, or lets an accepted order go stale). Thresholds live in
+`/admin/` → Trust policy — tune them live during the pilot.
 
 ## Payouts (merchant of record)
 

@@ -27,6 +27,10 @@ def my_requests(request):
 def create_request(request):
     if not request.user.is_verified_student:
         return Response({"detail": IsVerifiedStudent.message}, status=status.HTTP_403_FORBIDDEN)
+    from apps.trust.services import block_reason
+    reason = block_reason(request.user, "customer")
+    if reason:
+        return Response({"detail": reason}, status=status.HTTP_403_FORBIDDEN)
     serializer = RequestSerializer(data=request.data, context={"request": request})
     serializer.is_valid(raise_exception=True)
     serializer.save()
@@ -47,6 +51,10 @@ def get_request(request, pk):
 def accept(request, pk):
     if not request.user.is_verified_student or request.user.role != "helper":
         return Response({"detail": IsVerifiedStudent.message}, status=status.HTTP_403_FORBIDDEN)
+    from apps.trust.services import block_reason
+    reason = block_reason(request.user, "helper")
+    if reason:
+        return Response({"detail": reason}, status=status.HTTP_403_FORBIDDEN)
     try:
         obj = services.accept(pk, request.user)
     except services.ConflictLost:

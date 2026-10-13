@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.chat",
     "apps.notifications",
     "apps.availability",
+    "apps.trust",
     "apps.reports",
     "corsheaders",
 ]
