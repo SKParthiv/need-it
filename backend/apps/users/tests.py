@@ -154,6 +154,71 @@ class ProductionFlowTests(APITestCase):
         self.assertEqual(resp.status_code, 503)
 
 
+class GoogleAuthTests(APITestCase):
+    def _claims(self, email="130004220@sastra.ac.in", hd="sastra.ac.in",
+                verified=True):
+        return {"email": email, "email_verified": verified, "hd": hd,
+                "given_name": "Parthiv", "family_name": "Pedapati"}
+
+    def _post(self, claims, role="customer"):
+        from unittest.mock import patch
+        with self.settings(GOOGLE_CLIENT_ID="test-client-id",
+                           COLLEGE_EMAIL_DOMAINS=["sastra.ac.in"]), \
+             patch("google.oauth2.id_token.verify_oauth2_token",
+                   return_value=claims):
+            body = {"id_token": "fake.jwt.here"}
+            if role is not None:
+                body["role"] = role
+            return self.client.post("/api/auth/google/", body, format="json")
+
+    def test_first_signin_creates_verified_user(self):
+        resp = self._post(self._claims())
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("token", resp.json())
+        user = User.objects.get(email="130004220@sastra.ac.in")
+        self.assertTrue(user.is_verified_student)
+        self.assertEqual(user.role, "customer")
+        self.assertEqual(user.first_name, "Parthiv")
+
+    def test_returning_signin_links_existing_account(self):
+        existing = User.objects.create_user(
+            username="130004220@sastra.ac.in", email="130004220@sastra.ac.in",
+            password="pw", role="helper")
+        resp = self._post(self._claims(), role=None)
+        self.assertEqual(resp.status_code, 200)
+        existing.refresh_from_db()
+        self.assertTrue(existing.is_verified_student)
+        self.assertEqual(existing.role, "helper")  # role NOT overwritten
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_first_signin_requires_role(self):
+        resp = self._post(self._claims(), role=None)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_wrong_hosted_domain_rejected(self):
+        resp = self._post(self._claims(email="someone@gmail.com", hd="gmail.com"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_unverified_google_email_rejected(self):
+        resp = self._post(self._claims(verified=False))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_invalid_token_rejected(self):
+        from unittest.mock import patch
+        with self.settings(GOOGLE_CLIENT_ID="test-client-id"), \
+             patch("google.oauth2.id_token.verify_oauth2_token",
+                   side_effect=ValueError("bad token")):
+            resp = self.client.post("/api/auth/google/",
+                                    {"id_token": "garbage"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_unconfigured_google_auth_503s(self):
+        with self.settings(GOOGLE_CLIENT_ID=""):
+            resp = self.client.post("/api/auth/google/",
+                                    {"id_token": "x"}, format="json")
+        self.assertEqual(resp.status_code, 503)
+
+
 class EnsureAdminCommandTests(APITestCase):
     def test_creates_superuser_from_env(self):
         from django.core.management import call_command

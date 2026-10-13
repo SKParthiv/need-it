@@ -56,3 +56,14 @@ services:
       # (EMAIL_HOST/EMAIL_HOST_USER/EMAIL_HOST_PASSWORD also work as SMTP fallback
       #  where port 587 isn't blocked — e.g. a future paid host or local testing.)
       # Without email config, register returns the token in the API response.
+      # Google sign-in (primary auth): Google Auth platform → Clients → Web
+      # application client ID. Not a secret — it ships in the web bundle too.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      # Photos (price evidence + chat attachments): Cloudinary free tier.
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

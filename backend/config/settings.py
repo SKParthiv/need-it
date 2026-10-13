@@ -124,6 +124,9 @@ COLLEGE_EMAIL_DOMAINS = [
     for domain in os.environ.get("COLLEGE_EMAIL_DOMAINS", "").split(",")
     if domain.strip()
 ]
+# Google sign-in: OAuth Web client ID from Google Auth platform → Clients.
+# Blank = /api/auth/google/ answers 503 (password register/login still works).
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 PROHIBITED_ITEMS = [
     item.strip().lower()
     for item in os.environ.get("PROHIBITED_ITEMS", "").split(",")

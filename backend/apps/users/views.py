@@ -76,6 +76,66 @@ def register(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+def google_auth(request):
+    """Sign in (or create) an account with a Google ID token.
+
+    SASTRA email is Google Workspace, so a verified Google token with
+    hd == an allowed college domain IS student verification — the account
+    is born is_verified_student=True. First sign-in creates the account
+    (role taken from the request); later sign-ins link by email.
+    """
+    if not settings.GOOGLE_CLIENT_ID:
+        return Response({"detail": "Google sign-in is not configured."},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    id_token = str(request.data.get("id_token", "")).strip()
+    if not id_token:
+        return Response({"detail": "id_token is required."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            id_token, google_requests.Request(), settings.GOOGLE_CLIENT_ID)
+    except ValueError:
+        return Response({"detail": "Invalid Google token."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    email = str(claims.get("email", "")).lower().strip()
+    hosted_domain = str(claims.get("hd", "")).lower().strip()
+    domains = getattr(settings, "COLLEGE_EMAIL_DOMAINS", [])
+    if not claims.get("email_verified") or not email:
+        return Response({"detail": "Google account email is not verified."},
+                        status=status.HTTP_403_FORBIDDEN)
+    # hd (Workspace hosted domain) is the unforgeable campus proof; fall
+    # back to the email's domain only when hd is absent.
+    domain_ok = (hosted_domain in domains) if domains else True
+    if domains and not domain_ok:
+        domain_ok = not hosted_domain and email.rsplit("@", 1)[-1] in domains
+    if not domain_ok:
+        return Response({"detail": "Sign in with your college Google account."},
+                        status=status.HTTP_403_FORBIDDEN)
+    user = User.objects.filter(email__iexact=email).first()
+    if user is None:
+        role = str(request.data.get("role", "")).lower().strip()
+        if role not in (User.Role.CUSTOMER, User.Role.HELPER):
+            return Response(
+                {"detail": "role (customer|helper) is required for first sign-in."},
+                status=status.HTTP_400_BAD_REQUEST)
+        user = User.objects.create_user(
+            username=email, email=email,
+            first_name=claims.get("given_name", "")[:150],
+            last_name=claims.get("family_name", "")[:150],
+            role=role)
+        user.set_unusable_password()
+        user.save()
+    if not user.is_verified_student:
+        user.is_verified_student = True
+        user.save(update_fields=["is_verified_student"])
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({"token": token.key, "user": UserSerializer(user).data})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def resend_verification(request):
     """Fresh verification link for an unverified account.
 

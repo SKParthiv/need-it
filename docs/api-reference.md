@@ -17,6 +17,7 @@ Payment: `none → pending → held → released`, plus `failed`, `refunded`.
 | Method | Path | Who | Body → Response |
 | --- | --- | --- | --- |
 | POST | `auth/register/` | anyone | `{email, password, role, policy_accept:true}` → 201 `{user}` + (`verification_token` in pilot mode, or `{email_sent:true}`. If the provider fails: still 201, `{email_sent:false}` — the account exists, never a 500) |
+| POST | `auth/google/` | anyone | **Primary sign-in.** `{id_token, role?}` → `{token, user}`. Verifies the Google token server-side (signature + audience + `email_verified` + Workspace `hd` ∈ `COLLEGE_EMAIL_DOMAINS`); account is born `is_verified_student:true`. `role` required on first sign-in only. 503 when `GOOGLE_CLIENT_ID` unset |
 | POST | `auth/resend-verification/` | anyone | `{email}` → fresh link. Generic 200 for unknown/verified emails (no enumeration); `{verification_token}` in pilot mode; honest 503 if the provider is down |
 | GET | `auth/verify/?token=` | anyone | one-click link from the email → HTML page |
 | POST | `auth/verify-email/` | anyone | `{token}` → `{user}` (is_verified_student=true) |
