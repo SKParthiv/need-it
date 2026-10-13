@@ -8,19 +8,30 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ("id", "username", "name", "college_email", "email", "role",
                   "hostel_block", "pickup_point", "is_verified_student",
-                  "status", "joined_date", "upi_id")
+                  "status", "joined_date", "upi_id", "problems", "blocked")
         read_only_fields = ("is_verified_student",)
 
     name = serializers.SerializerMethodField()
     college_email = serializers.EmailField(source="email", read_only=True)
     status = serializers.SerializerMethodField()
     joined_date = serializers.DateTimeField(source="date_joined", read_only=True)
+    # Trust summary so clients can show state before a blocked action fails.
+    problems = serializers.SerializerMethodField()
+    blocked = serializers.SerializerMethodField()
 
     def get_status(self, obj):
         return "active" if obj.is_active else "inactive"
 
     def get_name(self, obj):
         return obj.get_full_name() or obj.email
+
+    def get_problems(self, obj):
+        from apps.trust.services import problem_count
+        return problem_count(obj)
+
+    def get_blocked(self, obj):
+        from apps.trust.services import block_reason
+        return block_reason(obj, obj.role) is not None
 
 
 class RegisterSerializer(serializers.ModelSerializer):
