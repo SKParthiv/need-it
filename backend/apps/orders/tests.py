@@ -249,8 +249,12 @@ class PhotoEvidenceTests(TestCase):
         return f"/api/requests/{self.req.id}/items/{self.item.id}/propose-price/"
 
     def test_signature_503_when_unconfigured(self):
+        from django.test import override_settings
         self.client.force_authenticate(self.helper)
-        resp = self.client.get("/api/uploads/signature/")
+        # Force unconfigured — dev/prod envs may carry real Cloudinary keys.
+        with override_settings(CLOUDINARY_CLOUD_NAME="", CLOUDINARY_API_KEY="",
+                               CLOUDINARY_API_SECRET=""):
+            resp = self.client.get("/api/uploads/signature/")
         self.assertEqual(resp.status_code, 503)
 
     def test_signature_shape_when_configured(self):
@@ -296,11 +300,14 @@ class PhotoEvidenceTests(TestCase):
         self.assertEqual(resp.status_code, 400)  # only our uploads count as evidence
 
     def test_photo_rejected_when_uploads_unconfigured(self):
+        from django.test import override_settings
         self.client.force_authenticate(self.helper)
-        resp = self.client.post(self._propose_url(), {
-            "actualPrice": 45,
-            "evidencePhotoUrl": self.CLOUD + "needit-evidence/abc.jpg",
-        }, format="json")
+        with override_settings(CLOUDINARY_CLOUD_NAME="", CLOUDINARY_API_KEY="",
+                               CLOUDINARY_API_SECRET=""):
+            resp = self.client.post(self._propose_url(), {
+                "actualPrice": 45,
+                "evidencePhotoUrl": self.CLOUD + "needit-evidence/abc.jpg",
+            }, format="json")
         self.assertEqual(resp.status_code, 400)  # no cloud configured → no uploads happened
 
     def test_propose_price_without_photo_still_works(self):
@@ -309,3 +316,80 @@ class PhotoEvidenceTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.item.refresh_from_db()
         self.assertEqual(self.item.evidence_photo_url, "")
+
+
+class PaymentCardTests(TestCase):
+    """The payment card chat message: posted when ALL items are approved,
+    carrying the helper's live upi_id + amount components (userflow-v2 §4)."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.cust = User.objects.create_user("pc-c@sastra.ac.in", password="x",
+                                             is_verified_student=True)
+        self.helper = User.objects.create_user("pc-h@sastra.ac.in", password="x",
+                                               role="helper", is_verified_student=True,
+                                               upi_id="helper@okhdfc")
+        self.req = Request.objects.create(
+            customer=self.cust, helper=self.helper, status=OrderStatus.ACCEPTED,
+            needed_by=timezone.now(), pickup_point="Gate", expected_total=100)
+        self.i1 = RequestItem.objects.create(request=self.req, name="Bread",
+                                             expected_price=40, actual_price=40)
+        self.i2 = RequestItem.objects.create(request=self.req, name="Milk",
+                                             expected_price=60, actual_price=55)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cust)
+
+    def _cards(self):
+        return [m for m in self.req.messages.filter(is_system_notice=True)
+                if m.card]
+
+    def _approve(self, **body):
+        return self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                                body, format="json")
+
+    def test_full_approval_posts_payment_card(self):
+        self.assertEqual(self._approve().status_code, 200)
+        cards = self._cards()
+        self.assertEqual(len(cards), 1)
+        card = cards[0].card
+        self.assertEqual(card["type"], "payment_card")
+        self.assertEqual(card["upiId"], "helper@okhdfc")
+        self.assertEqual(card["itemCost"], 95)  # 40 + 55, unavailable excluded
+        self.assertEqual(card["currency"], "INR")
+        self.assertIn("feeMin", card)  # client composes the upi:// link
+
+    def test_subset_approval_posts_no_card(self):
+        resp = self._approve(itemIds=[self.i1.id])
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._cards(), [])
+
+    def test_reapproval_without_change_posts_no_duplicate(self):
+        self._approve()
+        self._approve()
+        self.assertEqual(len(self._cards()), 1)
+
+    def test_repriced_reapproval_posts_fresh_card(self):
+        self._approve()
+        RequestItem.objects.filter(pk=self.i2.pk).update(actual_price=70,
+                                                         price_approved=False)
+        self._approve()
+        cards = self._cards()
+        self.assertEqual(len(cards), 2)
+        self.assertEqual(cards[-1].card["itemCost"], 110)  # latest wins
+
+    def test_helper_without_upi_gets_notice_not_card(self):
+        User.objects.filter(pk=self.helper.pk).update(upi_id="")
+        self._approve()
+        msgs = list(self.req.messages.filter(is_system_notice=True))
+        self.assertEqual(len(msgs), 1)
+        self.assertIsNone(msgs[0].card)
+        self.assertIn("UPI ID", msgs[0].text)
+
+    def test_card_serialized_in_messages(self):
+        from rest_framework.test import APIClient
+        self._approve()
+        data = self.client.get(f"/api/orders/{self.req.id}/messages/").json()
+        cards = [m for m in data if m.get("card")]
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["card"]["upiId"], "helper@okhdfc")
+

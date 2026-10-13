@@ -156,6 +156,13 @@ def approve_price(request, pk):
         from apps.notifications.models import Notification
         notify(obj.helper, Notification.Type.PRICE_CHANGE,
                "Prices approved", "The customer approved the item prices.", order=obj)
+        # Fully approved → the payment moment: post the payment card into
+        # the order chat (customer pays the helper directly via UPI).
+        unavailable = obj.items.model.ItemStatus.UNAVAILABLE
+        if not obj.items.exclude(status=unavailable).filter(
+                price_approved=False).exists():
+            from apps.chat.services import post_payment_card
+            post_payment_card(obj, request.user)
     return Response({"approved": list(items.values_list("id", flat=True))})
 
 

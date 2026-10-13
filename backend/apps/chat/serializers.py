@@ -12,7 +12,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
         fields = ("id", "senderRole", "senderName", "text", "photoUrl",
-                  "timestamp", "isSystemNotice")
+                  "timestamp", "isSystemNotice", "card")
         read_only_fields = ("id", "senderRole", "senderName", "timestamp", "isSystemNotice")
 
     def get_senderName(self, obj):
