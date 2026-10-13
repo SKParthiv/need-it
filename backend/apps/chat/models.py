@@ -8,6 +8,9 @@ class ChatMessage(models.Model):
     text = models.TextField(blank=True)
     photo_url = models.URLField(max_length=500, blank=True)
     is_system_notice = models.BooleanField(default=False)
+    # Structured card payloads (e.g. the payment card posted when prices are
+    # approved). Null for ordinary messages; shape documented in userflow-v2 §4.
+    card = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
