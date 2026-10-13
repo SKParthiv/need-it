@@ -1,3 +1,6 @@
+import hashlib
+import time
+from django.conf import settings
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -9,6 +12,7 @@ from . import services
 
 @api_view(["GET"])
 def feed(request):
+    services.sweep_stale_accepted()  # lazy timeout job (free tier: no Celery)
     queryset = Request.objects.filter(status=OrderStatus.OPEN).prefetch_related("items").order_by("needed_by")
     return Response(RequestSerializer(queryset, many=True, context={"request": request}).data)
 
@@ -100,8 +104,41 @@ def propose_price(request, pk, item_id):
         return Response({"detail": "Prices can only be proposed for accepted requests."}, status=400)
     item.actual_price = request.data.get("actualPrice")
     item.price_approved = False
-    item.save(update_fields=("actual_price", "price_approved"))
+    photo_url = (request.data.get("evidencePhotoUrl") or "").strip()
+    update_fields = ["actual_price", "price_approved"]
+    if photo_url:
+        cloud = settings.CLOUDINARY_CLOUD_NAME
+        allowed_prefix = f"https://res.cloudinary.com/{cloud}/" if cloud else None
+        if not allowed_prefix or not photo_url.startswith(allowed_prefix):
+            return Response({"detail": "Evidence photo must be a Need It upload."}, status=400)
+        item.evidence_photo_url = photo_url
+        update_fields.append("evidence_photo_url")
+    item.save(update_fields=update_fields)
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(item.request.customer, Notification.Type.PRICE_CHANGE,
+           "Price proposed", f"New price proposed for {item.name}.", order=item.request)
     return Response({"id": item.id, "actualPrice": item.actual_price, "priceApproved": False})
+
+
+@api_view(["GET"])
+def upload_signature(request):
+    """Sign one direct browser→Cloudinary upload. The API never proxies photos —
+    it just vouches for this upload, so storage and bandwidth stay Cloudinary's
+    free-tier problem, not ours."""
+    if not (settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY
+            and settings.CLOUDINARY_API_SECRET):
+        return Response({"detail": "Photo uploads are not configured."}, status=503)
+    timestamp = int(time.time())
+    folder = settings.CLOUDINARY_FOLDER
+    to_sign = f"folder={folder}&timestamp={timestamp}{settings.CLOUDINARY_API_SECRET}"
+    return Response({
+        "cloudName": settings.CLOUDINARY_CLOUD_NAME,
+        "apiKey": settings.CLOUDINARY_API_KEY,
+        "timestamp": timestamp,
+        "folder": folder,
+        "signature": hashlib.sha1(to_sign.encode()).hexdigest(),
+    })
 
 
 @api_view(["POST"])
@@ -114,6 +151,11 @@ def approve_price(request, pk):
     if items.filter(actual_price__isnull=True).exists():
         return Response({"detail": "Every item needs an actual price first."}, status=400)
     items.update(price_approved=True)
+    if obj.helper_id:
+        from apps.notifications.services import notify
+        from apps.notifications.models import Notification
+        notify(obj.helper, Notification.Type.PRICE_CHANGE,
+               "Prices approved", "The customer approved the item prices.", order=obj)
     return Response({"approved": list(items.values_list("id", flat=True))})
 
 
@@ -124,6 +166,10 @@ def mark_unavailable(request, pk, item_id):
         return Response({"detail": "Only the assigned helper can update this item."}, status=403)
     item.status = RequestItem.ItemStatus.UNAVAILABLE
     item.save(update_fields=("status",))
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(item.request.customer, Notification.Type.ITEM_UNAVAILABLE,
+           "Item unavailable", f"{item.name} is unavailable.", order=item.request)
     return Response({"id": item.id, "status": item.status})
 
 
@@ -162,10 +208,10 @@ def confirm_handover(request, pk):
     obj = Request.objects.filter(pk=pk).first()
     if not obj:
         return Response({"detail": "Request not found."}, status=404)
-    if request.data.get("code") != obj.ensure_handover_code():
-        return Response({"detail": "Invalid handover code."}, status=400)
+    if request.user.role != "helper":
+        return Response({"detail": "Only the helper can enter the handover code."}, status=403)
     try:
-        obj = services.confirm_handover(pk, request.user)
+        obj = services.confirm_handover(pk, request.user, request.data.get("code", ""))
     except services.IllegalTransition as error:
         return Response({"detail": str(error)}, status=400)
     return Response({"id": obj.id, "status": obj.status})

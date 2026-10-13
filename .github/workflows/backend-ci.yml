@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
-      - "docs/backend-setup-and-deployment.md"
+      - "docs/**"
       - ".github/workflows/backend-ci.yml"
   push:
     branches:
@@ -12,7 +12,7 @@ on:
       - "backend/**"
     paths:
       - "backend/**"
-      - "docs/backend-setup-and-deployment.md"
+      - "docs/**"
       - ".github/workflows/backend-ci.yml"
 
 jobs:
@@ -23,6 +23,7 @@ jobs:
         working-directory: backend
     env:
       DJANGO_SECRET_KEY: ci-only-not-a-production-secret
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_DEBUG: "false"
       PAYMENT_PROVIDER: manual
     steps:

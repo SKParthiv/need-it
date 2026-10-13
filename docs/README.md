@@ -1,21 +1,40 @@
-# docs/ — the contract
+# Need It Docs
 
-Everything both founders build against. If the code and a doc disagree, the doc
-wins until the doc is changed — by agreement, not by accident.
+## Read your lane
 
-| File | What it is | Who it serves |
-|---|---|---|
-| `PRD-v1.pdf` | The user requirements — what we're building | everyone |
-| `state-machine.md` | **The contract.** Order + payment states, transitions, guards, money rules | both founders |
-| `design-brief-v1.pdf` | Every screen and what it must contain (no backend detail) | frontend / UI |
-| `userflow-mindmap-v1.html` | Interactive map of the whole system — screens, API, data model, auth (open in a browser, click to expand) | everyone |
-| `backend-plan.md` | Orchestrator-ready phased build plan + free-tier storage analysis | backend |
-| `backend-setup-and-deployment.md` | How to run, deploy, and scale the backend | backend |
-| `TODO.md` | Current status and next steps | everyone |
+**I want to deploy / I'm on call**
+1. `deploy-free-tier.md` — the one-time setup (Neon → Render → Pages)
+2. `operations.md` — day-2 runbook: recurring jobs, limits, incidents, demo checklist
 
-## Reading order for a newcomer
+**I'm building a client (mobile/web)**
+1. **`userflow-v2.md` — THE contract: actors, auth, order spine, photos, trust. Start here.**
+2. `state-machine.md` — the status vocabulary
+3. `api-reference.md` — every endpoint, body, and error
 
-1. `PRD-v1.pdf` — the what
-2. `userflow-mindmap-v1.html` — the whole shape, visually
-3. `state-machine.md` — the rules that make money safe
-4. Then your lane: `design-brief-v1.pdf` (frontend) or `backend-plan.md` (backend)
+**I'm new to the backend**
+1. `architecture.md` — stack, app map, the 8 invariants
+2. `local-development.md` — setup, tests, smoke flow, LAN testing
+3. `state-machine.md` + `api-reference.md`
+
+**Founders deciding product**
+1. `decisions.md` — the ADR register: what we decided and why (when
+   anything and the repo disagree — the register wins)
+2. `userflow-v2.md` — the living product contract
+3. `TODO.md` — current status + open decisions
+
+## All files
+
+| File | What it is |
+| --- | --- |
+| `userflow-v2.md` | **The pilot contract** — actors, Google auth, order spine, photos, trust system. AI-first; supersedes the PDFs |
+| `architecture.md` | Runtime stack, monorepo map, invariants, payment seam |
+| `api-reference.md` | Complete endpoint reference |
+| `state-machine.md` | Order/payment status vocabulary contract |
+| `deploy-free-tier.md` | One-time production setup (~30 min of clicking) |
+| `operations.md` | Runbook: recurring jobs, limits, incidents, demo day |
+| `local-development.md` | Local setup, verification, smoke flow, LAN testing |
+| `decisions.md` | ADR register — supersedes the PRD where they conflict |
+| `PRD-v1.pdf` | ⚠ Historical. Superseded by `userflow-v2.md` + decisions.md |
+| `design-brief-v1.pdf` | ⚠ Historical. Superseded by `userflow-v2.md` |
+| `userflow-mindmap-v1.html` | ⚠ Historical. Superseded by `userflow-v2.md` |
+| `TODO.md` | Status + open founder decisions |

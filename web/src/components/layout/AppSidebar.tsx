@@ -21,7 +21,8 @@ import {
   Settings,
   MapPin,
   Radio,
-  BarChart3
+  BarChart3,
+  Wallet
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -69,6 +70,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const clubItems: SidebarItem[] = [
     { label: 'Overview', path: '/club', icon: LayoutDashboard },
+    { label: 'Payouts', path: '/club/payouts', icon: Wallet },
     { label: 'Problem Reports', path: '/club/reports', icon: FileText },
     { label: 'Verified Users', path: '/club/users', icon: Users },
     { label: 'All Requests', path: '/club/requests', icon: Layers },

@@ -49,14 +49,14 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({ onNavigate }) => {
     },
     {
       num: 5,
-      title: 'Approve prices & pay cashier',
-      desc: 'Helper uploads receipt or shop UPI QR code. You pay the retailer directly with 0% extra markup.',
+      title: 'Approve prices & deposit into escrow',
+      desc: 'Helper confirms actual store total. You deposit funds safely into Need It Escrow. Money is held securely and never released before delivery.',
       icon: QrCode
     },
     {
       num: 6,
-      title: 'Confirm with code & rate',
-      desc: 'Meet at your block lobby, show your 4-digit handover code, pay the ₹20–₹50 helper fee, and leave an optional review.',
+      title: 'Confirm with code & release escrow',
+      desc: 'Meet at your pickup point and share your 4-digit handover code. Handover confirmation immediately releases the escrow payout to your helper.',
       icon: CheckCircle2
     }
   ];

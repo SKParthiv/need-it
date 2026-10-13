@@ -151,6 +151,26 @@ export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
           </div>
         </div>
 
+        {/* 3. Escrow Security Assurance */}
+        <div className="p-6 sm:p-8 rounded-panel bg-brand-teal-light/30 dark:bg-brand-teal/10 border border-brand-teal/30 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-2 text-center md:text-left">
+            <span className="text-xs font-bold text-brand-teal uppercase tracking-wider flex items-center justify-center md:justify-start gap-1.5">
+              <ShieldCheck className="w-4 h-4" /> Escrow Payment Protection
+            </span>
+            <h3 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
+              Zero-Risk Peer Escrow Guarantee
+            </h3>
+            <p className="text-xs sm:text-sm text-neutral-secondary max-w-xl">
+              When you pay, funds are safely held in Need It Escrow and never transferred to the helper until you meet at the campus drop-off point and verify the 4-digit handover code. If an item cannot be found or the order is cancelled, you receive a full refund.
+            </p>
+          </div>
+          <div className="shrink-0 p-3 rounded-card bg-white dark:bg-slate-800 border border-brand-teal/20 text-center space-y-1 shadow-sm">
+            <span className="text-[10px] text-neutral-secondary uppercase font-semibold block">Escrow Release Rule</span>
+            <span className="text-xs font-bold text-brand-teal font-mono block">Code Verified Handover Only</span>
+            <span className="text-[10px] text-neutral-placeholder block">100% Refundable prior to purchase</span>
+          </div>
+        </div>
+
         {/* CTA */}
         <div className="text-center pt-4 space-y-4">
           <div className="flex items-center justify-center gap-4">

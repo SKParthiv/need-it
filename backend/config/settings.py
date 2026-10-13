@@ -8,10 +8,36 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --- Load .env file if present ---
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
 # --- Core ---
-SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]  # required, no default — set it in .env
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        # Local-dev convenience only. Never acceptable with DEBUG off:
+        # a predictable SECRET_KEY lets anyone forge sessions/tokens.
+        SECRET_KEY = "local-dev-fallback-secret-key-needit"
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is not true"
+        )
+# ALLOWED_HOSTS: in DEBUG default to "*" so phones/other laptops on the LAN can
+# reach the dev server. With DEBUG off it MUST be set explicitly via env.
+if DEBUG:
+    ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+else:
+    ALLOWED_HOSTS = os.environ["DJANGO_ALLOWED_HOSTS"].split(",")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -26,9 +52,15 @@ INSTALLED_APPS = [
     "apps.orders",
     "apps.payments",
     "apps.chat",
+    "apps.notifications",
+    "apps.availability",
+    "apps.reports",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
+    "config.middleware.RequestIdMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -64,6 +96,11 @@ if os.environ.get("POSTGRES_HOST"):
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
             "HOST": os.environ["POSTGRES_HOST"],
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            # Managed Postgres (Neon) REQUIRES SSL — without this the first
+            # deploy's migrate fails to connect. Local docker Postgres has no
+            # SSL, so default flips with DEBUG; override with POSTGRES_SSLMODE.
+            "OPTIONS": {"sslmode": os.environ.get(
+                "POSTGRES_SSLMODE", "disable" if DEBUG else "require")},
         }
     }
 else:
@@ -83,7 +120,7 @@ REST_FRAMEWORK = {
 }
 
 COLLEGE_EMAIL_DOMAINS = [
-    domain.strip().lower()
+    domain.strip().lower().lstrip("@")  # tolerate "@sastra.ac.in" style entries
     for domain in os.environ.get("COLLEGE_EMAIL_DOMAINS", "").split(",")
     if domain.strip()
 ]
@@ -106,6 +143,59 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_ACCESS_KEY = os.environ.get("S3_ACCESS_KEY", "")
 S3_SECRET_KEY = os.environ.get("S3_SECRET_KEY", "")
 
+# --- Production hardening ---
+# Render (and any TLS-terminating proxy) forwards requests as plain HTTP;
+# trust X-Forwarded-Proto so redirects/admin/secure cookies behave.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    CSRF_TRUSTED_ORIGINS = [
+        o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
+    ]
+
+# --- Email (verification links) ---
+# Render's free tier BLOCKS outbound SMTP (ports 25/465/587), so production
+# uses an HTTP email API via anymail. Provider priority: SendGrid (100/day
+# free, no card, single-sender Gmail verification), then Brevo (300/day but
+# IP-restricts some accounts — unusable from Render's dynamic egress IPs).
+# Plain SMTP (EMAIL_HOST et al.) still works for local/dev where port 587 is
+# open. With none configured, register returns the token in the API
+# response (pilot mode).
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "Need It <noreply@needit.in>")
+if SENDGRID_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend"
+    ANYMAIL = {"SENDGRID_API_KEY": SENDGRID_API_KEY}
+    EMAIL_CONFIGURED = True
+elif BREVO_API_KEY:
+    EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+    ANYMAIL = {"BREVO_API_KEY": BREVO_API_KEY}
+    EMAIL_CONFIGURED = True
+elif EMAIL_HOST and EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_CONFIGURED = True
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    EMAIL_CONFIGURED = False
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", EMAIL_BACKEND)
+
+# Public origin of THIS api, used to build verification links in emails.
+PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", "http://localhost:8000").rstrip("/")
+
+# --- CORS (web app on a different origin calls the API) ---
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:3000"
+).split(",")
+
 # --- Push (FCM) ---
 FCM_SERVER_KEY = os.environ.get("FCM_SERVER_KEY", "")
 
@@ -115,8 +205,24 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/
 # --- Business rules (from PRD, tunable) ---
 HELPER_FEE_MIN = int(os.environ.get("HELPER_FEE_MIN", "20"))
 HELPER_FEE_MAX = int(os.environ.get("HELPER_FEE_MAX", "50"))
+PLATFORM_CUT_PER_ORDER = int(os.environ.get("PLATFORM_CUT_PER_ORDER", "2"))
 PAYMENT_TIMEOUT_MINUTES = int(os.environ.get("PAYMENT_TIMEOUT_MINUTES", "30"))
 ORDER_VALUE_CAP = int(os.environ.get("ORDER_VALUE_CAP", "2000"))
+
+# --- Photo evidence uploads (Cloudinary free tier) ---
+# Direct browser→Cloudinary signed uploads: the API only signs, never proxies.
+# All three unset = uploads disabled (signature endpoint answers 503).
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
+CLOUDINARY_FOLDER = os.environ.get("CLOUDINARY_FOLDER", "needit-evidence")
+
+# --- Razorpay (merchant of record, BASE account — no Route until ₹40L) ---
+# Blank keys = the razorpay_base provider refuses to create charges.
+# PAYMENT_PROVIDER=razorpay_base flips collection from manual UPI to gateway.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
@@ -126,3 +232,29 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {"()": "config.middleware.RequestIdFilter"},
+    },
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s %(levelname)s %(name)s "
+                      "request_id=%(request_id)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "filters": ["request_id"],
+            "formatter": "default",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.environ.get("LOG_LEVEL", "INFO"),
+    },
+}

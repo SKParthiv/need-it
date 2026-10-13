@@ -35,7 +35,7 @@ When `POSTGRES_HOST` is unset, local development and tests use SQLite. Set it
 in `.env` to use Postgres.
 
 For the complete PostgreSQL, Redis/Celery, object storage, Render, and CI/CD
-setup, see [`docs/backend-setup-and-deployment.md`](../docs/backend-setup-and-deployment.md).
+setup, testing, and LAN devices, see [`docs/local-development.md`](../docs/local-development.md).
 For local multi-machine testing, Docker Compose, and scaling topology, use the
 same guide.
 

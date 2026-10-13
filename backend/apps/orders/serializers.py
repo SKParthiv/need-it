@@ -1,17 +1,20 @@
 from django.conf import settings
 from rest_framework import serializers
-from .models import Request, RequestItem
+from .models import OrderStatus, Request, RequestItem
 
 
 class RequestItemSerializer(serializers.ModelSerializer):
     expectedPrice = serializers.IntegerField(source="expected_price")
     actualPrice = serializers.IntegerField(source="actual_price", allow_null=True, required=False)
     replacementProposal = serializers.JSONField(source="replacement_proposal", allow_null=True, required=False)
+    evidencePhotoUrl = serializers.URLField(source="evidence_photo_url", read_only=True)
+    priceApproved = serializers.BooleanField(source="price_approved", read_only=True)
 
     class Meta:
         model = RequestItem
         fields = ("id", "name", "quantity", "expectedPrice", "actualPrice",
-                  "notes", "status", "replacementProposal")
+                  "notes", "status", "replacementProposal", "evidencePhotoUrl",
+                  "priceApproved")
         read_only_fields = ("id", "actualPrice", "status", "replacementProposal")
 
 
@@ -24,12 +27,25 @@ class RequestSerializer(serializers.ModelSerializer):
     expectedTotal = serializers.IntegerField(source="expected_total")
     customerName = serializers.CharField(source="customer.get_full_name", read_only=True)
     helperId = serializers.IntegerField(source="helper_id", read_only=True, allow_null=True)
+    handoverCode = serializers.SerializerMethodField()
 
     class Meta:
         model = Request
         fields = ("id", "customerName", "neededBy", "isUrgent", "pickupPoint",
-                  "expectedTotal", "status", "createdAt", "helperId", "items")
+                  "expectedTotal", "status", "createdAt", "helperId", "items",
+                  "handoverCode")
         read_only_fields = ("id", "customerName", "status", "createdAt", "helperId")
+
+    def get_handoverCode(self, obj):
+        """The OTP is money: it releases payment and completes the order when
+        the helper enters it. So it renders ONLY for the customer, and only
+        once the order is awaiting handover. The helper must receive it
+        physically — never through the API."""
+        user = self.context["request"].user
+        if user.id == obj.customer_id and obj.status in (
+                OrderStatus.PURCHASED, OrderStatus.HANDED_OVER, OrderStatus.COMPLETED):
+            return obj.handover_code or None
+        return None
 
     def validate_items(self, items):
         prohibited = {item.lower() for item in getattr(settings, "PROHIBITED_ITEMS", [])}

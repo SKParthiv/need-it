@@ -15,4 +15,5 @@ urlpatterns = [
     path("requests/<int:pk>/items/<int:item_id>/replacement/", views.propose_replacement),
     path("requests/<int:pk>/items/<int:item_id>/approve-replacement/", views.approve_replacement),
     path("requests/<int:pk>/confirm-handover/", views.confirm_handover),
+    path("uploads/signature/", views.upload_signature),
 ]

@@ -20,6 +20,7 @@ class Payment(models.Model):
     currency = models.CharField(max_length=3, default="INR")
     provider = models.CharField(max_length=20, default="manual")
     provider_ref = models.CharField(max_length=120, blank=True)  # gateway order/payment id
+    payment_url = models.CharField(max_length=500, blank=True)  # gateway Payment Link the customer opens
     customer_confirmed = models.BooleanField(default=False)
     helper_confirmed = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=64, unique=True)
@@ -41,3 +42,39 @@ class PaymentEvent(models.Model):
     kind = models.CharField(max_length=60)
     payload = models.JSONField(default=dict)
     received_at = models.DateTimeField(auto_now_add=True)
+
+
+class PayoutStatus(models.TextChoices):
+    DUE = "due", "Due"
+    PAID = "paid", "Paid"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class Payout(models.Model):
+    """
+    Merchant-of-record settlement. The platform collected the customer's money,
+    so the platform owes the helper: item cost + helper fee - platform cut.
+    Created exactly once per completed order (OneToOne is the idempotency
+    guarantee). A founder settles it via UPI from the admin console, then marks
+    it paid with the UTR. Component fields are snapshots — the record of what
+    was owed and why, even if fees/settings change later.
+    """
+    request = models.OneToOneField("orders.Request", on_delete=models.CASCADE,
+                                   related_name="payout")
+    helper = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                               related_name="payouts")
+    item_cost = models.PositiveIntegerField()
+    helper_fee = models.PositiveIntegerField()
+    platform_cut = models.PositiveIntegerField()
+    amount = models.PositiveIntegerField()
+    upi_id = models.CharField(max_length=80, blank=True)  # snapshot; live value on helper profile
+    status = models.CharField(max_length=20, choices=PayoutStatus.choices,
+                              default=PayoutStatus.DUE, db_index=True)
+    utr = models.CharField(max_length=64, blank=True)  # UPI reference from the founder's bank app
+    paid_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name="settled_payouts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Payout #{self.pk} -> helper {self.helper_id} ({self.status}, ₹{self.amount})"

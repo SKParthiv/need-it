@@ -17,6 +17,8 @@ export interface OrderItem {
   notes?: string;
   category: string;
   status: 'pending' | 'found' | 'unavailable' | 'replaced';
+  evidencePhotoUrl?: string; // helper's shelf/receipt photo — the customer's price evidence
+  priceApproved?: boolean;
   replacementProposal?: {
     name: string;
     price: number;
@@ -46,7 +48,7 @@ export interface Order {
   createdAt: string;
   helperId?: string;
   helperName?: string;
-  handoverCode: string;
+  handoverCode?: string; // customer-only, present once the order is purchased
   cancellationReason?: string;
   ratingGiven?: number;
   ratingFeedback?: string;

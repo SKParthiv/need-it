@@ -16,6 +16,7 @@ import {
   MapPin,
   Camera,
   ShieldAlert,
+  ShieldCheck,
   Send,
   Lock,
   ThumbsUp,
@@ -38,7 +39,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
   orderId,
   onNavigate
 }) => {
-  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage } = useWebApp();
+  const { getOrderById, updateOrderStatus, getChatByOrderId, sendMessage, approvePrices } = useWebApp();
   const order = getOrderById(orderId);
 
   if (!order) {
@@ -94,6 +95,8 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
   const [newMsgText, setNewMsgText] = useState('');
   const [itemApprovalStatus, setItemApprovalStatus] = useState<Record<string, 'approved' | 'declined'>>({});
   const [priceApproved, setPriceApproved] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState('');
   const [ratingStars, setRatingStars] = useState(5);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -275,7 +278,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
             { id: 'chat', label: 'Chat', icon: MessageSquare, badge: chatData.unreadCount },
             { id: 'item_checks', label: 'Item Checks', icon: Camera },
             { id: 'price_approval', label: 'Price Approval', icon: ShoppingBag },
-            { id: 'payment', label: 'Payment (UPI)', icon: QrCode },
+            { id: 'payment', label: 'Escrow Payment', icon: Lock },
             { id: 'handover', label: 'Handover Code', icon: PackageCheck },
             { id: 'rating', label: 'Review & Rating', icon: Star },
           ].map((tab) => {
@@ -586,73 +589,145 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
                 </p>
               </div>
 
-              {/* Side-by-Side Comparison Card (10.4: card shakes horizontally once 6px, 300ms + amber border) */}
-              <div className="p-5 rounded-panel border-2 border-semantic-warning bg-white dark:bg-slate-900 shadow-sm space-y-4 animate-shake">
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800">
-                    <span className="text-[11px] text-neutral-secondary block">Original Estimate</span>
-                    <span className="font-heading font-extrabold text-xl font-mono text-neutral-ink dark:text-neutral-dark-text">
-                      ₹170
-                    </span>
-                  </div>
+              {(() => {
+                const pricedItems = order.items.filter((i) => i.status !== 'unavailable');
+                const allPriced = pricedItems.length > 0 && pricedItems.every((i) => i.actualPrice != null);
+                const allApproved = pricedItems.length > 0 && pricedItems.every((i) => i.priceApproved);
+                const estTotal = pricedItems.reduce((s, i) => s + i.expectedPrice * i.quantity, 0);
+                const actTotal = pricedItems.reduce((s, i) => s + (i.actualPrice ?? i.expectedPrice) * i.quantity, 0);
+                return (
+                  <>
+                    <div className={`p-5 rounded-panel border-2 bg-white dark:bg-slate-900 shadow-sm space-y-4 ${allApproved || priceApproved ? 'border-semantic-success' : 'border-semantic-warning animate-shake'}`}>
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800">
+                          <span className="text-[11px] text-neutral-secondary block">Original Estimate</span>
+                          <span className="font-heading font-extrabold text-xl font-mono text-neutral-ink dark:text-neutral-dark-text">
+                            ₹{estTotal}
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-card bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800">
+                          <span className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold block">
+                            Actual Store Total
+                          </span>
+                          <span className="font-heading font-extrabold text-xl font-mono text-amber-900 dark:text-amber-200">
+                            {allPriced ? `₹${actTotal}` : '…'}
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="p-3 rounded-card bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800">
-                    <span className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold block">
-                      Actual Store Total
-                    </span>
-                    <span className="font-heading font-extrabold text-xl font-mono text-amber-900 dark:text-amber-200">
-                      ₹180
-                    </span>
-                  </div>
-                </div>
+                      {/* Per-item lines with the helper's shelf/receipt photos as evidence */}
+                      <div className="space-y-3">
+                        {pricedItems.map((item) => (
+                          <div key={item.id} className="flex items-start gap-3 text-xs">
+                            {item.evidencePhotoUrl && (
+                              <a href={item.evidencePhotoUrl} target="_blank" rel="noreferrer" className="shrink-0">
+                                <img
+                                  src={item.evidencePhotoUrl}
+                                  alt={`Shelf evidence for ${item.name}`}
+                                  className="h-12 w-12 rounded-card object-cover border border-neutral-border dark:border-slate-700"
+                                />
+                              </a>
+                            )}
+                            <div className="flex-1">
+                              <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text block">
+                                {item.name} × {item.quantity}
+                              </span>
+                              <span className="text-neutral-secondary font-mono">
+                                est. ₹{item.expectedPrice} → {item.actualPrice != null ? `₹${item.actualPrice}` : 'helper at the shelf…'}
+                              </span>
+                            </div>
+                            {item.priceApproved && (
+                              <span className="text-semantic-success font-semibold">✓</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
 
-                <p className="text-xs text-neutral-secondary leading-relaxed">
-                  The notebook price at Bits & Bytes Stationery is ₹60 instead of the estimated ₹50 (+₹10 difference). Helper has paused checkout awaiting your go-ahead.
-                </p>
+                      <p className="text-xs text-neutral-secondary leading-relaxed">
+                        {allPriced
+                          ? 'Check each price against the photo evidence. Nothing is bought until you approve.'
+                          : 'Your helper is still at the shelf — prices appear here as they send them, with photos.'}
+                      </p>
 
-                <div className="pt-2 flex items-center gap-3">
-                  <button
-                    onClick={() => setPriceApproved(true)}
-                    className="flex-1 h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white text-xs font-semibold transition-colors"
-                  >
-                    {priceApproved ? '✓ Price Confirmed & Approved' : 'Approve Actual Price (₹180)'}
-                  </button>
+                      {approveError && (
+                        <p className="text-xs text-semantic-danger font-medium">{approveError}</p>
+                      )}
 
-                  <button
-                    onClick={() => alert('Price rejected. Helper will return items to shelf without charging you.')}
-                    className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink"
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
+                      <div className="pt-2 flex items-center gap-3">
+                        <button
+                          disabled={!allPriced || allApproved || priceApproved || approving}
+                          onClick={async () => {
+                            setApproveError('');
+                            setApproving(true);
+                            try {
+                              await approvePrices(order.id);
+                              setPriceApproved(true);
+                            } catch (e: any) {
+                              setApproveError(e?.message || 'Could not approve right now. Try again.');
+                            } finally {
+                              setApproving(false);
+                            }
+                          }}
+                          className="flex-1 h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                        >
+                          {allApproved || priceApproved
+                            ? '✓ Prices Approved'
+                            : approving
+                              ? 'Approving…'
+                              : allPriced
+                                ? `Approve Actual Price (₹${actTotal})`
+                                : 'Waiting for helper prices…'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
-          {/* TAB 5: PAYMENT (UPI) */}
+          {/* TAB 5: ESCROW PAYMENT */}
           {activeTab === 'payment' && (
             <div className="space-y-5">
               <div>
-                <h3 className="font-heading font-bold text-base text-neutral-ink dark:text-neutral-dark-text">
-                  Split Payment Breakdown
-                </h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldCheck className="w-5 h-5 text-brand-teal" />
+                  <h3 className="font-heading font-bold text-base text-neutral-ink dark:text-neutral-dark-text">
+                    Campus Escrow Protection
+                  </h3>
+                </div>
                 <p className="text-xs text-neutral-secondary">
-                  Two separate moments: Store items paid via cashier QR, helper fee paid after physical handover.
+                  Your funds are held securely in Need It Escrow. Payment is ONLY released to the helper once physical handover is verified with your drop-off code.
                 </p>
               </div>
 
-              {/* Itemised Payment Sheet (Section 8) */}
+              {/* Escrow Status Progress Banner */}
+              <div className="p-4 rounded-panel bg-brand-teal-light/30 dark:bg-brand-teal/15 border border-brand-teal/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-brand-teal flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" /> Escrow Security Guarantee
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-teal text-white">
+                    {order.status === 'completed' ? 'Escrow Released' : 'Held in Escrow'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-secondary">
+                  Money captured &amp; held in escrow → Helper purchases items → Both confirm handover code → Escrow released to helper.
+                </p>
+              </div>
+
+              {/* Itemised Payment Breakdown */}
               <div className="p-5 rounded-panel border border-neutral-border dark:border-slate-800 bg-neutral-surface-alt/40 dark:bg-slate-800/40 space-y-4">
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center text-neutral-secondary">
-                    <span>Retail Goods Subtotal (Paid to Store)</span>
+                    <span>Retail Goods Subtotal (Held for Store)</span>
                     <span className="font-mono font-bold text-neutral-ink dark:text-neutral-dark-text text-sm">
                       ₹{order.itemCost}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-brand-teal font-medium">
-                    <span>Helper Delivery Fee (Paid after Handover)</span>
+                    <span>Helper Delivery Fee (Escrowed)</span>
                     <span className="font-mono font-bold text-sm">
                       ₹{order.helperFee}
                     </span>
@@ -661,35 +736,37 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
 
                 <div className="pt-3 border-t border-neutral-border dark:border-slate-700 flex justify-between items-center">
                   <span className="font-heading font-bold text-sm text-neutral-ink dark:text-neutral-dark-text">
-                    Total Order Value
+                    Total Amount into Escrow
                   </span>
                   <span className="font-mono font-extrabold text-xl text-brand-indigo dark:text-brand-indigo-darkmode">
                     ₹{order.totalCost}
                   </span>
                 </div>
 
-                {/* Primary Button: Open UPI App (Section 8) */}
+                {/* Primary Button: Pay into Escrow */}
                 <div className="pt-2 space-y-2">
                   <button
-                    onClick={() => alert('Simulating UPI App Intent (GPay / PhonePe / Paytm)...')}
-                    className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm"
+                    onClick={() => {
+                      alert('Simulating Escrow Payment Deposit (UPI / Gateway). Funds are now locked in Need It Escrow.');
+                      updateOrderStatus(order.id, 'accepted', { status: 'accepted' });
+                    }}
+                    className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-[0.98]"
                   >
-                    <QrCode className="w-4 h-4" />
-                    <span>Open UPI App to Pay Cashier</span>
+                    <Lock className="w-4 h-4" />
+                    <span>Authorize &amp; Deposit ₹{order.totalCost} in Escrow</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => alert('Payment marked done by customer.')}
-                    className="w-full h-10 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-body dark:text-slate-300 hover:bg-white"
-                  >
-                    I Have Completed Payment
-                  </button>
+                  <p className="text-center text-[10px] text-neutral-placeholder">
+                    Zero Risk: Full refund guaranteed if items are unavailable or delivery is cancelled before handover.
+                  </p>
                 </div>
               </div>
 
-              <div className="p-3 rounded-card bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300">
-                ✓ <strong>Reassurance:</strong> You pay nothing for unbought or declined items.
+              <div className="p-3 rounded-card bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                <span>
+                  <strong>Escrow Security:</strong> The helper never receives your money directly until you share the 4-digit handover verification code at the campus pickup point.
+                </span>
               </div>
             </div>
           )}
@@ -710,6 +787,13 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
               </div>
 
               {/* Big 4-Digit Handover Code (10.4: digits fade in sequentially 50ms each) */}
+              {!order.handoverCode ? (
+                <div className="p-8 rounded-panel bg-neutral-surface-alt dark:bg-slate-900 border-2 border-dashed border-neutral-border dark:border-slate-700">
+                  <p className="text-xs text-neutral-secondary">
+                    Your code appears here once the helper marks your items as purchased.
+                  </p>
+                </div>
+              ) : (
               <div className="p-8 rounded-panel bg-neutral-surface-alt dark:bg-slate-900 border-2 border-dashed border-brand-indigo/40 space-y-2">
                 <span className="text-[11px] font-semibold text-neutral-secondary uppercase tracking-widest block">
                   One-Time Student Code
@@ -725,6 +809,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({
                   Valid for {order.pickupPoint}
                 </span>
               </div>
+              )}
 
               <div className="p-3.5 rounded-card bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-left text-xs space-y-1">
                 <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text block">Meeting Location</span>

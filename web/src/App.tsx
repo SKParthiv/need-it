@@ -172,7 +172,7 @@ const AppContent: React.FC = () => {
 
     // Strict Interface Isolation Guard:
     // Ordinary users cannot directly access another role's interface routes.
-    // Developer Super Admin (130180058@sastra.ac.in) can access all interfaces.
+    // Developer Super Admin (first entry in VITE_ADMIN_EMAILS) can access all interfaces.
     if (!isSuperAdmin) {
       const isCustomerRoute =
         currentPath === '/app/home' ||
@@ -242,6 +242,7 @@ const AppContent: React.FC = () => {
     if (currentPath === '/club/shops') return <ClubConsole section="shops" onNavigate={navigate} />;
     if (currentPath === '/club/broadcast') return <ClubConsole section="broadcast" onNavigate={navigate} />;
     if (currentPath === '/club/insights') return <ClubConsole section="insights" onNavigate={navigate} />;
+    if (currentPath === '/club/payouts') return <ClubConsole section="payouts" onNavigate={navigate} />;
 
     // 7. Special Error Screens
     if (currentPath === '/404') return <SpecialScreens type="404" onNavigate={navigate} />;
