@@ -6,9 +6,7 @@ import { Footer } from './components/layout/Footer';
 import { AppHeader } from './components/layout/AppHeader';
 import { AppBottomNav } from './components/layout/AppBottomNav';
 import { AppSidebar } from './components/layout/AppSidebar';
-import { SiteNavigatorHUD } from './components/layout/SiteNavigatorHUD';
 import { ConsentBanner } from './components/common/ConsentBanner';
-import { AskNeeditModal } from './components/common/AskNeeditModal';
 
 // Public Pages
 import { Home } from './pages/public/Home';
@@ -39,13 +37,10 @@ import { RequestDetail } from './pages/helper/RequestDetail';
 import { MyJobs } from './pages/helper/MyJobs';
 import { JobDetail } from './pages/helper/JobDetail';
 import { Availability } from './pages/helper/Availability';
-import { ShopPortal } from './pages/helper/ShopPortal';
 
 // Shared App Pages
-import { ChatPages } from './pages/shared/ChatPages';
 import { NotificationsPage } from './pages/shared/NotificationsPage';
 import { ProfilePage } from './pages/shared/ProfilePage';
-import { AskNeeditPage } from './pages/shared/AskNeeditPage';
 import { ReportProblemPage } from './pages/shared/ReportProblemPage';
 
 // Club Console
@@ -60,7 +55,6 @@ const AppContent: React.FC = () => {
     window.location.pathname || '/'
   );
   const [isDark, setIsDark] = useState<boolean>(false);
-  const [askNeeditOpen, setAskNeeditOpen] = useState(false);
 
   // Sync dark class on html tag
   useEffect(() => {
@@ -144,7 +138,6 @@ const AppContent: React.FC = () => {
     if (currentPath === '/login') {
       return (
         <AuthPages
-          mode="login"
           onNavigate={navigate}
         />
       );
@@ -152,7 +145,6 @@ const AppContent: React.FC = () => {
     if (currentPath === '/register') {
       return (
         <AuthPages
-          mode="register"
           onNavigate={navigate}
         />
       );
@@ -188,7 +180,7 @@ const AppContent: React.FC = () => {
     }
 
     // 3. Customer Pages
-    if (currentPath === '/app/home') return <CustomerHome onNavigate={navigate} onOpenAskNeedit={() => setAskNeeditOpen(true)} />;
+    if (currentPath === '/app/home') return <CustomerHome onNavigate={navigate} />;
     if (currentPath === '/app/post') return <PostRequest onNavigate={navigate} onPostSuccess={(id) => navigate(`/app/orders/${id}`)} />;
     if (currentPath === '/app/orders') return <MyOrders onNavigate={navigate} />;
     if (currentPath.startsWith('/app/orders/')) {
@@ -209,17 +201,18 @@ const AppContent: React.FC = () => {
       return <JobDetail orderId={id} onNavigate={navigate} />;
     }
     if (currentPath === '/app/helper/availability') return <Availability onNavigate={navigate} />;
-    if (currentPath === '/app/helper/shops') return <ShopPortal onNavigate={navigate} />;
+    // Shops are cut for the pilot — anything pointing at the old portal lands
+    // on the job list instead of a mock storefront.
+    if (currentPath === '/app/helper/shops') return <MyJobs onNavigate={navigate} />;
 
-    // 5. Shared Pages
-    if (currentPath === '/app/chat') return <ChatPages onNavigate={navigate} />;
-    if (currentPath.startsWith('/app/chat/')) {
-      const id = currentPath.split('/')[3] || 'ORD-1092';
-      return <ChatPages chatId={id} onNavigate={navigate} />;
+    // 5. Shared Pages — order chat lives inside each order view; there is no
+    // global chat list, so /app/chat lands on the user's order list instead.
+    if (currentPath.startsWith('/app/chat')) {
+      return role === 'helper' ? <MyJobs onNavigate={navigate} /> : <MyOrders onNavigate={navigate} />;
     }
     if (currentPath === '/app/notifications') return <NotificationsPage onNavigate={navigate} />;
     if (currentPath === '/app/profile') return <ProfilePage role={role} onNavigate={navigate} onLogout={() => navigate('/login')} />;
-    if (currentPath === '/app/ask') return <AskNeeditPage onNavigate={navigate} />;
+    if (currentPath === '/app/ask') return role === 'helper' ? <MyJobs onNavigate={navigate} /> : <MyOrders onNavigate={navigate} />;
     if (currentPath === '/app/report') return <ReportProblemPage onNavigate={navigate} />;
 
     // 6. Club Console
@@ -270,7 +263,6 @@ const AppContent: React.FC = () => {
             else if (newRole === 'club') navigate('/club');
           }}
           onNavigate={navigate}
-          onOpenAskNeedit={() => setAskNeeditOpen(true)}
           isDark={isDark}
           onToggleDark={() => setIsDark(!isDark)}
           userInitials={userInitials}
@@ -285,7 +277,6 @@ const AppContent: React.FC = () => {
             role={isClubPage ? 'club' : role}
             currentPath={currentPath}
             onNavigate={navigate}
-            onOpenAskNeedit={() => setAskNeeditOpen(true)}
           />
         )}
 
@@ -308,28 +299,6 @@ const AppContent: React.FC = () => {
           hideOnCurrentScreen={currentPath.includes('/orders/') || currentPath.includes('/jobs/')}
         />
       )}
-
-      {/* Ask NEEDIT Shop Chatbot Panel */}
-      <AskNeeditModal
-        isOpen={askNeeditOpen}
-        onClose={() => setAskNeeditOpen(false)}
-        onNavigate={navigate}
-      />
-
-      {/* Site Master Navigator HUD (Persistent interactive switcher for all 35+ pages) */}
-      <SiteNavigatorHUD
-        currentPath={currentPath}
-        role={isClubPage ? 'club' : role}
-        onNavigate={navigate}
-        onRoleChange={(r) => {
-          setRole(r);
-          if (r === 'customer') navigate('/app/home');
-          else if (r === 'helper') navigate('/app/helper/feed');
-          else if (r === 'club') navigate('/club');
-        }}
-        isDark={isDark}
-        onToggleDark={() => setIsDark(!isDark)}
-      />
 
       {/* India DPDP Privacy & Cookie Banner */}
       <ConsentBanner onNavigate={navigate} />

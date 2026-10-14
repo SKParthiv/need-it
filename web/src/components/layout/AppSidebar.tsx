@@ -30,7 +30,6 @@ interface AppSidebarProps {
   role: UserRole;
   currentPath: string;
   onNavigate: (path: string) => void;
-  onOpenAskNeedit: () => void;
 }
 
 interface SidebarItem {
@@ -43,8 +42,7 @@ interface SidebarItem {
 export const AppSidebar: React.FC<AppSidebarProps> = ({
   role,
   currentPath,
-  onNavigate,
-  onOpenAskNeedit
+  onNavigate
 }) => {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -53,7 +51,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { label: 'Post a Request', path: '/app/post', icon: PlusCircle, isHighlight: true },
     { label: 'My Orders', path: '/app/orders', icon: Package },
     { label: 'Order History', path: '/app/history', icon: Clock },
-    { label: 'Messages', path: '/app/chat', icon: MessageSquare },
     { label: 'Profile Settings', path: '/app/profile', icon: User },
     { label: 'Report a Problem', path: '/app/report', icon: ShieldAlert },
   ];
@@ -62,8 +59,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { label: 'Request Feed', path: '/app/helper/feed', icon: Compass },
     { label: 'My Delivery Jobs', path: '/app/helper/jobs', icon: Briefcase },
     { label: 'Going Out Times', path: '/app/helper/availability', icon: Calendar },
-    { label: 'Shop Portal', path: '/app/helper/shops', icon: Store },
-    { label: 'Messages', path: '/app/chat', icon: MessageSquare },
     { label: 'Profile Settings', path: '/app/profile', icon: User },
     { label: 'Report a Problem', path: '/app/report', icon: ShieldAlert },
   ];
@@ -119,21 +114,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         })}
       </div>
 
-      {/* Bottom utility: Ask NEEDIT shortcut & Collapse toggle */}
+      {/* Bottom utility: Collapse toggle */}
       <div className="p-3 border-t border-neutral-border dark:border-neutral-dark-border space-y-2">
-        {role !== 'club' && (
-          <button
-            onClick={onOpenAskNeedit}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-btn text-xs font-semibold bg-brand-indigo-light/70 dark:bg-brand-indigo/10 text-brand-indigo dark:text-brand-indigo-darkmode hover:bg-brand-indigo-light transition-colors ${
-              collapsed ? 'justify-center' : ''
-            }`}
-            title="Ask NEEDIT Bot"
-          >
-            <HelpCircle className="w-4 h-4 shrink-0" />
-            {!collapsed && <span>Ask NEEDIT Bot</span>}
-          </button>
-        )}
-
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="w-full h-9 flex items-center justify-center rounded-btn text-neutral-secondary dark:text-neutral-dark-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800 transition-colors text-xs"

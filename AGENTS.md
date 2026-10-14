@@ -14,10 +14,10 @@ contract. Read this file BEFORE writing any code.
   included), phone numbers, UPI IDs, room numbers, or full names in code,
   seeds, fixtures, or docs. Use fictional placeholders:
   `student1@example.com`, `TestPass123!` (dev-only seeds), "Hostel Block X".
-- **Seed accounts are fictional.** `backend/seed_test_accounts.py` may
-  only contain made-up people with made-up passwords, and it refuses to
-  run when `DEBUG` is off. Never add a real person, and never grant
-  `is_staff`/`is_superuser` to a seeded account that isn't obviously fake.
+- **No seed accounts, period.** Sign-in is real SASTRA Google Workspace
+  only; there is no demo-user mechanism in the app. Backend tests create
+  their own throwaway users inside the test DB. Never reintroduce a seed
+  script with shared credentials.
 - **If a secret or personal detail was already committed:** rotating the
   secret is the only real fix — deleting the line does NOT remove it from
   git history. Tell the maintainer immediately.

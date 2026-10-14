@@ -337,4 +337,23 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  async listNotifications() {
+    return apiFetch<{ unreadCount: number; notifications: any[] }>('/notifications/');
+  },
+
+  async markNotificationRead(id: number | string) {
+    return apiFetch(`/notifications/${id}/read/`, { method: 'POST' });
+  },
+
+  async markAllNotificationsRead() {
+    return apiFetch('/notifications/read-all/', { method: 'POST' });
+  },
+
+  async fileReport(payload: { orderId: number; issueType: string; details: string; priority?: string }) {
+    return apiFetch<any>('/reports/file/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };

@@ -8,7 +8,6 @@ interface AppHeaderProps {
   role: UserRole;
   onRoleChange: (newRole: UserRole) => void;
   onNavigate: (path: string) => void;
-  onOpenAskNeedit: () => void;
   unreadNotificationsCount?: number;
   isDark: boolean;
   onToggleDark: () => void;
@@ -20,7 +19,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   role,
   onRoleChange,
   onNavigate,
-  onOpenAskNeedit,
   unreadNotificationsCount = 0,
   isDark,
   onToggleDark,
@@ -114,18 +112,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* Right Action Icons */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Ask NEEDIT shortcut button */}
-          {!isClub && (
-            <button
-              onClick={onOpenAskNeedit}
-              className="flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-xs font-medium bg-brand-indigo-light text-brand-indigo dark:bg-brand-indigo/20 dark:text-brand-indigo-darkmode hover:bg-brand-indigo/15 transition-colors"
-              title="Ask NEEDIT shop assistant"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Ask NEEDIT</span>
-            </button>
-          )}
-
           {/* Theme Switcher */}
           <button
             onClick={onToggleDark}

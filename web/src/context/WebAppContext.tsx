@@ -32,6 +32,7 @@ interface WebAppContextType {
     hostel: string;
     pickupPoint: string;
     isVerified: boolean;
+    upiId?: string;
   };
   isSuperAdmin: boolean;
   authorizedAdminEmails: string[];
@@ -45,6 +46,7 @@ interface WebAppContextType {
     last_name?: string;
   }) => Promise<UserRole>;
   logout: () => Promise<void>;
+  updateProfile: (data: { upi_id?: string; hostel_block?: string; pickup_point?: string }) => Promise<void>;
   orders: Order[];
   refreshOrders: () => Promise<void>;
   addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'handoverCode'>) => Order;
@@ -64,36 +66,14 @@ interface WebAppContextType {
 
 const DEFAULT_USERS = {
   customer: {
-    name: 'Aarav Sharma',
-    email: 'customer@sastra.ac.in',
-    alias: 'Student #4092',
-    hostel: 'Hostel Block A, Room 312',
-    pickupPoint: 'Boys’ Hostel Area',
-    isVerified: true,
-  },
-  helper: {
-    name: 'Priya K.',
-    email: 'helper@sastra.ac.in',
-    alias: 'Delivery Agent #4099',
-    hostel: 'Girls’ Hostel Area',
-    pickupPoint: 'Girls’ Hostel Area',
-    isVerified: true,
-  },
-  club: {
-    name: 'Campus Safety Council Admin',
-    email: 'admin@sastra.ac.in',
-    alias: 'Council Officer',
-    hostel: 'Admin / Dev HQ',
-    pickupPoint: 'ASK Building / Fountain Area',
-    isVerified: true,
-  },
-  superAdmin: {
-    name: 'Sri Thinesh',
-    email: SUPER_ADMIN_EMAIL || 'admin@sastra.ac.in',
-    alias: 'Developer & Super Admin',
-    hostel: 'Admin / Dev HQ',
-    pickupPoint: 'ASK Building / Fountain Area',
-    isVerified: true,
+    // Pre-login placeholder only — replaced by the real Google account the
+    // moment sign-in completes. Never a fake identity.
+    name: 'Guest',
+    email: '',
+    alias: '',
+    hostel: '',
+    pickupPoint: '',
+    isVerified: false,
   },
 };
 
@@ -149,7 +129,7 @@ const WebAppContext = createContext<WebAppContextType | null>(null);
 
 export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<UserRole>('customer');
-  const [currentUser, setCurrentUser] = useState(DEFAULT_USERS.customer);
+  const [currentUser, setCurrentUser] = useState<WebAppContextType['currentUser']>(DEFAULT_USERS.customer);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [chats, setChats] = useState<Record<string, ChatConversation>>({});
@@ -194,6 +174,36 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [refreshOrders]);
 
+  // Notifications: real backend feed, refreshed on a slower cadence than orders.
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const token = getStoredToken();
+      if (!token) return;
+      const res = await api.listNotifications();
+      if (Array.isArray(res?.notifications)) {
+        setNotifications(
+          res.notifications.map((n: any) => ({
+            id: String(n.id),
+            title: n.title,
+            message: n.message,
+            timestamp: n.timestamp,
+            read: !!n.read,
+            orderId: n.orderId ? String(n.orderId) : undefined,
+            type: n.type,
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn('Backend notifications refresh fallback:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshNotifications();
+    const timer = setInterval(refreshNotifications, 15000);
+    return () => clearInterval(timer);
+  }, [refreshNotifications]);
+
   // The backend owns identity: password check, token issue, role assignment.
   // The UI only resolves which portal to show from the user the API returns.
   const applyUser = (user: any): UserRole => {
@@ -211,8 +221,14 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       hostel: user.hostel_block || 'Campus Hostel',
       pickupPoint: user.pickup_point || 'Boys’ Hostel Area',
       isVerified: !!user.is_verified_student,
+      upiId: user.upi_id || '',
     });
     return resolved;
+  };
+
+  const updateProfile = async (data: { upi_id?: string; hostel_block?: string; pickup_point?: string }) => {
+    const updated = await api.updateMe(data);
+    applyUser(updated);
   };
 
   const login = async (email: string, password: string): Promise<UserRole> => {
@@ -415,6 +431,9 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    api.markNotificationRead(id).catch((e) =>
+      console.warn('Backend mark-notification-read notice:', e)
+    );
   };
 
   return (
@@ -429,6 +448,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         googleLogin,
         register,
         logout,
+        updateProfile,
         orders,
         refreshOrders,
         addOrder,

@@ -1,21 +1,39 @@
 import React, { useState } from 'react';
-import { ShieldAlert, CheckCircle2, ArrowLeft, Camera, AlertCircle } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useWebApp } from '../../context/WebAppContext';
+import { api } from '../../services/api';
 
 interface ReportProblemPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate }) => {
-  const { orders } = useWebApp();
-  const [selectedOrder, setSelectedOrder] = useState('general');
+  const { orders, role } = useWebApp();
+  const reportableOrders = orders.filter((o) => o.helperId || o.status !== 'open');
+  const [selectedOrder, setSelectedOrder] = useState('');
   const [issueType, setIssueType] = useState('Item missing or damaged');
   const [details, setDetails] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [submittedId, setSubmittedId] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitError(null);
+    const orderId = parseInt(selectedOrder, 10);
+    if (!orderId) {
+      setSubmitError('Pick the order this report is about.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const report = await api.fileReport({ orderId, issueType, details: details.trim() });
+      setSubmittedId(report.id);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Could not file the report. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -38,14 +56,14 @@ export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate
       </div>
 
       <div className="bg-white dark:bg-neutral-dark-card rounded-panel border border-neutral-border dark:border-neutral-dark-border p-6 sm:p-8 shadow-e2 space-y-6">
-        {submitted ? (
+        {submittedId !== null ? (
           <div className="p-8 text-center rounded-panel bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 space-y-3">
             <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
             <h3 className="font-heading font-bold text-lg text-emerald-900 dark:text-emerald-300">
               Problem Report Logged
             </h3>
             <p className="text-xs text-emerald-800 dark:text-emerald-200 leading-relaxed max-w-sm mx-auto">
-              Your ticket Reference is <strong className="font-mono text-sm">#REP-304</strong>. The student council team has flagged this order and will reach out via in-app chat or college email within 2 hours.
+              Your ticket reference is <strong className="font-mono text-sm">#REP-{submittedId}</strong>. The admin team can see it in the console and will reach out via the order chat.
             </p>
             <button
               onClick={() => onNavigate('/app/home')}
@@ -65,13 +83,18 @@ export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate
                 onChange={(e) => setSelectedOrder(e.target.value)}
                 className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm"
               >
-                <option value="general">General Campus Inquiry / Not order specific</option>
-                {orders.map((o) => (
+                <option value="">— choose an order —</option>
+                {reportableOrders.map((o) => (
                   <option key={o.id} value={o.id}>
                     #{o.id} — {o.items.map((it) => it.name).join(', ')} ({o.status})
                   </option>
                 ))}
               </select>
+              {reportableOrders.length === 0 && (
+                <p className="mt-1 text-[11px] text-neutral-secondary">
+                  Reports attach to an order you've {role === 'helper' ? 'accepted' : 'had accepted'}. For anything else, use the Contact page.
+                </p>
+              )}
             </div>
 
             <div>
@@ -84,10 +107,10 @@ export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate
                 className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm"
               >
                 <option>Item missing or damaged</option>
-                <option>Price dispute / Unapproved price difference</option>
-                <option>No-show at handover campus location</option>
-                <option>Inappropriate peer conduct or communication</option>
-                <option>Other issue</option>
+                <option>Price dispute</option>
+                <option>No-show at handover</option>
+                <option>Inappropriate behavior</option>
+                <option>Other</option>
               </select>
             </div>
 
@@ -104,25 +127,19 @@ export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate
               />
             </div>
 
-            <div>
-              <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                Attach Photo Evidence (Optional)
-              </label>
-              <button
-                type="button"
-                onClick={() => alert('Simulating photo attachment...')}
-                className="w-full h-14 rounded-input border-2 border-dashed border-neutral-border dark:border-slate-700 flex items-center justify-center gap-2 text-neutral-secondary hover:text-neutral-ink hover:bg-neutral-surface-alt"
-              >
-                <Camera className="w-4 h-4" />
-                <span>Upload receipt photo or damaged item picture</span>
-              </button>
-            </div>
+            {submitError && (
+              <div className="p-3 rounded-input bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{submitError}</span>
+              </div>
+            )}
 
             <button
               type="submit"
-              className="w-full h-12 rounded-btn bg-semantic-danger hover:bg-red-700 text-white font-semibold text-sm shadow-sm transition-colors"
+              disabled={submitting}
+              className="w-full h-12 rounded-btn bg-semantic-danger hover:bg-red-700 disabled:opacity-60 text-white font-semibold text-sm shadow-sm transition-colors"
             >
-              Submit Ticket to Club Moderators
+              {submitting ? 'Submitting…' : 'Submit Ticket to Club Moderators'}
             </button>
           </form>
         )}

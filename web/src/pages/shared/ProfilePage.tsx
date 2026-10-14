@@ -27,24 +27,40 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onNavigate,
   onLogout
 }) => {
-  const { currentUser, role } = useWebApp();
+  const { currentUser, role, updateProfile } = useWebApp();
 
   const [name, setName] = useState(currentUser.name);
   const [hostel, setHostel] = useState(currentUser.hostel);
   const [pickupPoint, setPickupPoint] = useState(currentUser.pickupPoint);
-  const [contactPref, setContactPref] = useState('In-app chat only (masked numbers)');
+  const [upiId, setUpiId] = useState(currentUser.upiId || '');
   const [savedNotice, setSavedNotice] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(currentUser.name);
     setHostel(currentUser.hostel);
     setPickupPoint(currentUser.pickupPoint);
+    setUpiId(currentUser.upiId || '');
   }, [currentUser]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 2500);
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await updateProfile({
+        hostel_block: hostel,
+        pickup_point: pickupPoint,
+        ...(role === 'helper' ? { upi_id: upiId.trim() } : {}),
+      });
+      setSavedNotice(true);
+      setTimeout(() => setSavedNotice(false), 2500);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not save. Check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const initials =
@@ -113,6 +129,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             <span>Profile settings saved successfully!</span>
           </div>
         )}
+        {saveError && (
+          <div className="p-3.5 rounded-card bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 text-xs">
+            {saveError}
+          </div>
+        )}
 
         <form onSubmit={handleSave} className="space-y-4 text-xs">
           <div>
@@ -122,9 +143,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+              disabled
+              className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm opacity-70 cursor-not-allowed"
             />
+            <p className="mt-1 text-[11px] text-neutral-secondary">Name comes from your sign-up details and can't be changed here.</p>
           </div>
 
           <div>
@@ -156,26 +178,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </select>
           </div>
 
-          <div>
-            <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-              Contact & Notification Preference
-            </label>
-            <select
-              value={contactPref}
-              onChange={(e) => setContactPref(e.target.value)}
-              className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm"
-            >
-              <option>In-app chat only (masked numbers)</option>
-              <option>WhatsApp broadcast notification alerts</option>
-              <option>Both in-app chat & SMS OTPs</option>
-            </select>
-          </div>
+          {role === 'helper' && (
+            <div>
+              <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                Your UPI ID
+              </label>
+              <input
+                type="text"
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                placeholder="yourname@okhdfc"
+                className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+              />
+              <p className="mt-1 text-[11px] text-neutral-secondary">
+                Customers pay you directly to this UPI ID. Without it, orders you accept can't show a payment QR.
+              </p>
+            </div>
+          )}
 
           <button
             type="submit"
-            className="w-full h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-medium text-xs shadow-sm transition-colors"
+            disabled={saving}
+            className="w-full h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark disabled:opacity-60 text-white font-medium text-xs shadow-sm transition-colors"
           >
-            Save Changes
+            {saving ? 'Saving…' : 'Save Changes'}
           </button>
         </form>
 

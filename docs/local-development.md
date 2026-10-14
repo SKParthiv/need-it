@@ -29,9 +29,10 @@ SQLite is the local default (no Postgres install needed). To test against
 real Postgres: `docker compose -f backend/docker-compose.local.yml up postgres`
 and set the `POSTGRES_*` vars in `backend/.env`.
 
-Test accounts: `python manage.py seed_test_accounts` (DEBUG only) creates
-customer/helper/admin @sastra.ac.in users. Passwords come from
-`SEED_PASSWORD`/`SEED_ADMIN_PASSWORD` env or the printed defaults.
+Accounts: real SASTRA Google sign-in only (no seeded users — the seed script
+was removed). For local sign-in, add `http://localhost:3000` to the OAuth
+client's JavaScript origins in Google Cloud Console. Backend tests create
+their own throwaway users.
 
 ## Verify before you push
 
