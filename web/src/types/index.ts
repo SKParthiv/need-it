@@ -54,16 +54,32 @@ export interface Order {
   ratingFeedback?: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  senderRole: 'customer' | 'helper' | 'system';
-  senderName: string;
-  text: string;
-  photoUrl?: string;
-  qrCodeUrl?: string;
-  timestamp: string;
-  isSystemNotice?: boolean;
-}
+  // Server-posted payment card (docs/userflow-v2 §4). Arrives attached to a
+  // system chat message when all item prices are approved; the client
+  // composes the upi:// deep link from it. Latest card wins.
+  export interface PaymentCard {
+    type: 'payment_card';
+    orderId: number;
+    upiId: string;
+    itemCost: number;
+    feeMin: number;
+    feeMax: number;
+    suggestedFee: number;
+    currency: string; // "INR"
+    note: string; // e.g. "Need It order #14" — becomes the upi:// tn param
+  }
+
+  export interface ChatMessage {
+    id: string;
+    senderRole: 'customer' | 'helper' | 'system';
+    senderName: string;
+    text: string;
+    photoUrl?: string;
+    qrCodeUrl?: string;
+    timestamp: string;
+    isSystemNotice?: boolean;
+    card?: PaymentCard;
+  }
 
 export interface ChatConversation {
   id: string;
