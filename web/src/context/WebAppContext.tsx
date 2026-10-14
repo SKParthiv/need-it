@@ -35,7 +35,14 @@ interface WebAppContextType {
   };
   isSuperAdmin: boolean;
   authorizedAdminEmails: string[];
-  loginAsRole: (role: UserRole, customEmail?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<UserRole>;
+  register: (data: {
+    email: string;
+    password: string;
+    role: 'customer' | 'helper';
+    first_name?: string;
+    last_name?: string;
+  }) => Promise<UserRole>;
   logout: () => Promise<void>;
   orders: Order[];
   refreshOrders: () => Promise<void>;
@@ -175,17 +182,9 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const user = getStoredUser();
     if (user && user.email) {
-      const userRole: UserRole = user.role === 'helper' ? 'helper' : 'customer';
-      setRole(userRole);
-      setCurrentUser({
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username,
-        email: user.email,
-        alias: `Student #${user.id || '4092'}`,
-        hostel: user.hostel_block || 'Campus Hostel',
-        pickupPoint: user.pickup_point || 'Boys’ Hostel Area',
-        isVerified: !!user.is_verified_student,
-      });
+      applyUser(user);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -194,41 +193,39 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [refreshOrders]);
 
-  const loginAsRole = async (newRole: UserRole, customEmail?: string) => {
-    setRole(newRole);
-    let targetEmail = customEmail?.trim().toLowerCase();
+  // The backend owns identity: password check, token issue, role assignment.
+  // The UI only resolves which portal to show from the user the API returns.
+  const applyUser = (user: any): UserRole => {
+    const email = (user.email || '').toLowerCase();
+    const resolved: UserRole = AUTHORIZED_ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(email)
+      ? 'club'
+      : user.role === 'helper'
+      ? 'helper'
+      : 'customer';
+    setRole(resolved);
+    setCurrentUser({
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username,
+      email: user.email,
+      alias: `Student #${user.id || ''}`,
+      hostel: user.hostel_block || 'Campus Hostel',
+      pickupPoint: user.pickup_point || 'Boys’ Hostel Area',
+      isVerified: !!user.is_verified_student,
+    });
+    return resolved;
+  };
 
-    if (!targetEmail) {
-      if (newRole === 'helper') targetEmail = 'helper@sastra.ac.in';
-      else if (newRole === 'club') targetEmail = 'admin@sastra.ac.in';
-      else targetEmail = 'customer@sastra.ac.in';
-    }
-
-    try {
-      const res = await api.quickLoginAs(
-        newRole === 'helper' ? 'helper' : 'customer',
-        targetEmail
-      );
-      if (res && res.user) {
-        setCurrentUser({
-          name: `${res.user.first_name || ''} ${res.user.last_name || ''}`.trim() || res.user.username,
-          email: res.user.email,
-          alias: `Student #${res.user.id || '4092'}`,
-          hostel: res.user.hostel_block || 'Campus Hostel',
-          pickupPoint: res.user.pickup_point || 'Boys’ Hostel Area',
-          isVerified: !!res.user.is_verified_student,
-        });
-      }
-    } catch (err) {
-      console.warn('API login notice:', err);
-      const baseUser = DEFAULT_USERS[newRole] || DEFAULT_USERS.customer;
-      setCurrentUser({
-        ...baseUser,
-        email: targetEmail,
-      });
-    }
-
+  const login = async (email: string, password: string): Promise<UserRole> => {
+    const res = await api.login(email, password);
+    const resolved = applyUser(res.user);
     setTimeout(refreshOrders, 300);
+    return resolved;
+  };
+
+  const register: WebAppContextType['register'] = async (data) => {
+    const res = await api.register(data);
+    const resolved = applyUser(res.user);
+    setTimeout(refreshOrders, 300);
+    return resolved;
   };
 
   const logout = async () => {
@@ -420,7 +417,8 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentUser,
         isSuperAdmin,
         authorizedAdminEmails: AUTHORIZED_ADMIN_EMAILS,
-        loginAsRole,
+        login,
+        register,
         logout,
         orders,
         refreshOrders,

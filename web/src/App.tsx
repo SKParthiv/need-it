@@ -55,7 +55,7 @@ import { ClubConsole } from './pages/club/ClubConsole';
 import { SpecialScreens } from './pages/special/SpecialScreens';
 
 const AppContent: React.FC = () => {
-  const { role, setRole, loginAsRole, currentUser, isSuperAdmin } = useWebApp();
+  const { role, setRole, currentUser, isSuperAdmin } = useWebApp();
   const [currentPath, setCurrentPath] = useState<string>(
     window.location.pathname || '/'
   );
@@ -146,9 +146,6 @@ const AppContent: React.FC = () => {
         <AuthPages
           mode="login"
           onNavigate={navigate}
-          onLoginSuccess={(r, customEmail) => {
-            loginAsRole(r, customEmail);
-          }}
         />
       );
     }
@@ -157,9 +154,6 @@ const AppContent: React.FC = () => {
         <AuthPages
           mode="register"
           onNavigate={navigate}
-          onLoginSuccess={(r, customEmail) => {
-            loginAsRole(r, customEmail);
-          }}
         />
       );
     }
