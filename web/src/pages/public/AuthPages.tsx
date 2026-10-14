@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Logo } from '../../components/common/Logo';
 import {
   ShieldCheck,
@@ -17,6 +17,51 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { AUTHORIZED_ADMIN_EMAILS, useWebApp } from '../../context/WebAppContext';
+
+// Real Google Workspace sign-in (GIS). Renders Google's own button; the
+// returned ID token goes to POST /api/auth/google/, which enforces the
+// @sastra.ac.in hosted domain server-side. Renders nothing when the build
+// has no VITE_GOOGLE_CLIENT_ID (local dev without Google setup).
+const GoogleSignInButton: React.FC<{ onCredential: (idToken: string) => void }> = ({ onCredential }) => {
+  const divRef = useRef<HTMLDivElement>(null);
+  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || '';
+  const callbackRef = useRef(onCredential);
+  callbackRef.current = onCredential;
+
+  useEffect(() => {
+    if (!clientId || !divRef.current) return;
+    const init = () => {
+      const g = (window as any).google;
+      if (!g?.accounts?.id || !divRef.current) return;
+      g.accounts.id.initialize({
+        client_id: clientId,
+        callback: (resp: any) => {
+          if (resp?.credential) callbackRef.current(resp.credential);
+        },
+      });
+      divRef.current.innerHTML = '';
+      g.accounts.id.renderButton(divRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: 320,
+        text: 'continue_with',
+      });
+    };
+    if ((window as any).google?.accounts?.id) {
+      init();
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = init;
+    document.head.appendChild(s);
+  }, [clientId]);
+
+  if (!clientId) return null;
+  return <div ref={divRef} className="flex justify-center" />;
+};
 
 interface AuthPagesProps {
   mode: 'login' | 'register';
@@ -40,7 +85,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { login, register } = useWebApp();
+  const { login, register, googleLogin } = useWebApp();
 
   const sastraEmailRegex = /^[0-9a-zA-Z._%+-]+@sastra\.ac\.in$/i;
 
@@ -58,9 +103,22 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
     else onNavigate('/app/home');
   };
 
+  const handleGoogleCredential = async (idToken: string) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const resolved = await googleLogin(idToken, role === 'helper' ? 'helper' : 'customer');
+      navigateForRole(resolved);
+    } catch (err: any) {
+      setError(err?.message || 'Google sign-in failed. Use your SASTRA Workspace account.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Real authentication: the backend verifies the password and issues the
   // session token. Which portal you land in comes from the account's role
-  // on the server â€” never from what the client claims.
+  // on the server — never from what the client claims.
   const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -185,7 +243,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-neutral-secondary mt-1">
-                    Pick up requests from campus stores on your walks and earn â‚¹20â€“â‚¹50 per delivery.
+                    Pick up requests from campus stores on your walks and earn ₹20–₹50 per delivery.
                   </p>
                 </div>
               </button>
@@ -291,7 +349,19 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
               </div>
             )}
 
-            {/* Credentials Form â€” real backend auth, no shortcuts */}
+            {/* Google Workspace sign-in (primary path for students) */}
+            {role !== 'club' && (
+              <div className="space-y-2">
+                <GoogleSignInButton onCredential={handleGoogleCredential} />
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-neutral-placeholder uppercase font-medium">Or with email &amp; password</span>
+                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
+                </div>
+              </div>
+            )}
+
+            {/* Credentials Form — real backend auth, no shortcuts */}
             <form onSubmit={handleCredentialsSubmit} className="space-y-4">
               {mode === 'register' && (
                 <div className="grid grid-cols-2 gap-3">
@@ -387,7 +457,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
               >
                 <span>
                   {submitting
-                    ? 'Signing inâ€¦'
+                    ? 'Signing in…'
                     : mode === 'login'
                     ? `Sign In to ${
                         role === 'helper'

@@ -36,6 +36,7 @@ interface WebAppContextType {
   isSuperAdmin: boolean;
   authorizedAdminEmails: string[];
   login: (email: string, password: string) => Promise<UserRole>;
+  googleLogin: (idToken: string, role: 'customer' | 'helper') => Promise<UserRole>;
   register: (data: {
     email: string;
     password: string;
@@ -216,6 +217,13 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const login = async (email: string, password: string): Promise<UserRole> => {
     const res = await api.login(email, password);
+    const resolved = applyUser(res.user);
+    setTimeout(refreshOrders, 300);
+    return resolved;
+  };
+
+  const googleLogin = async (idToken: string, gRole: 'customer' | 'helper'): Promise<UserRole> => {
+    const res = await api.googleLogin(idToken, gRole);
     const resolved = applyUser(res.user);
     setTimeout(refreshOrders, 300);
     return resolved;
@@ -418,6 +426,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isSuperAdmin,
         authorizedAdminEmails: AUTHORIZED_ADMIN_EMAILS,
         login,
+        googleLogin,
         register,
         logout,
         orders,

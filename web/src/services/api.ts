@@ -96,6 +96,7 @@ export const api = {
       body: JSON.stringify({
         ...data,
         email: data.email.trim().toLowerCase(),
+        policy_accept: true,
       }),
     });
     // Pilot mode returns the verification token in the response (DEBUG /
@@ -105,6 +106,18 @@ export const api = {
     }
     // Then log in with the credentials the user just chose
     return this.login(data.email, data.password);
+  },
+
+  // Google Workspace sign-in: the backend verifies the ID token against
+  // GOOGLE_CLIENT_ID, enforces the @sastra.ac.in hosted domain, and
+  // auto-verifies the student. `role` is required only on FIRST sign-in.
+  async googleLogin(idToken: string, role?: 'customer' | 'helper') {
+    const res = await apiFetch<{ token: string; user: any }>('/auth/google/', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken, role }),
+    });
+    setStoredAuth(res.token, res.user);
+    return res;
   },
 
   async verifyEmail(token: string) {
