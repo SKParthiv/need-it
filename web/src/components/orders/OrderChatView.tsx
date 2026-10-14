@@ -135,6 +135,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     item_cost?: number;
     helper_fee?: number;
     total?: number;
+    provider?: string;
   }>({ status: 'none' });
   const [isPaying, setIsPaying] = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
@@ -198,6 +199,24 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       isMounted = false;
     };
   }, [orderId, order?.status]);
+
+  // Merchant-of-record mode (D9): the gateway's signed webhook marks the
+  // payment held — neither side taps "confirm". Poll while we wait for it.
+  const isGateway = Boolean(
+    paymentData.provider && paymentData.provider.startsWith('razorpay')
+  );
+  useEffect(() => {
+    if (!isGateway || paymentData.status !== 'pending') return;
+    const timer = setInterval(async () => {
+      const numId = parseInt(orderId, 10);
+      if (isNaN(numId)) return;
+      try {
+        const res = await api.getPaymentStatus(numId);
+        if (res) setPaymentData((prev) => ({ ...prev, ...res }));
+      } catch { /* transient — next tick retries */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [isGateway, paymentData.status, orderId]);
 
   // Clean up preview object URL
   useEffect(() => {
@@ -342,9 +361,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     setPaymentError('');
     try {
       await payOrder(order.id, paymentCard?.suggestedFee ?? order.helperFee);
-      // Mark customer confirmation ("I've paid" attestation; the payment
-      // turns held only when the helper also confirms — backend owns this)
-      await confirmPayment(order.id);
+      // Manual UPI mode: customer attests "I've paid" (the payment turns
+      // held only when the helper also confirms). Gateway mode: the signed
+      // webhook is the only confirmer — the app never takes our word for it.
+      if (!isGateway) {
+        await confirmPayment(order.id);
+      }
       setPaymentData((prev) => ({ ...prev, status: 'pending' }));
       await refreshOrders();
     } catch (err: any) {
@@ -851,7 +873,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 }`}
               >
                 {paymentData.status === 'held' || paymentData.status === 'released'
-                  ? '✓ Payment Confirmed'
+                  ? (isGateway ? '✓ Payment Held' : '✓ Payment Confirmed')
                   : paymentData.status === 'pending'
                   ? '⏳ Payment Pending'
                   : 'Payable'}
@@ -882,7 +904,10 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               </div>
             </div>
 
-            {/* Helper UPI ID with 1-click copy */}
+            {/* Helper UPI ID with 1-click copy (manual UPI mode only — in
+                gateway mode the customer pays the platform's link and never
+                sees the helper's UPI) */}
+            {!isGateway && (
             <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 flex items-center justify-between gap-2 text-xs">
               <div className="min-w-0">
                 <span className="text-[10px] text-neutral-secondary block">Helper UPI Address</span>
@@ -906,9 +931,10 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 </button>
               )}
             </div>
+            )}
 
-            {/* Client-Side QR Code & UPI Deep-Link Action */}
-            {upiDeepLink ? (
+            {/* Client-Side QR Code & UPI Deep-Link Action (manual mode only) */}
+            {!isGateway && (upiDeepLink ? (
               <div className="flex flex-col items-center justify-center space-y-3 pt-1">
                 <div className="p-3 bg-white rounded-2xl shadow-md border border-neutral-border inline-block">
                   <ClientQrCode value={upiDeepLink} size={170} />
@@ -930,6 +956,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               <div className="p-3 text-center text-xs text-neutral-secondary bg-neutral-surface-alt dark:bg-slate-800 rounded-card">
                 Note: Server did not return a helper UPI ID or deep link for this order. Enter the UPI handle directly in your UPI app.
               </div>
+            ))}
+
+            {isGateway && paymentData.status === 'none' && (
+              <div className="p-3 text-center text-xs text-neutral-secondary bg-neutral-surface-alt dark:bg-slate-800 rounded-card">
+                Secure Razorpay link (UPI, cards, netbanking). The platform holds your payment and releases it to the helper only after the handover OTP.
+              </div>
             )}
 
             {paymentError && (
@@ -950,27 +982,31 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                       {isPaying ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Recording Payment...</span>
+                          <span>{isGateway ? 'Opening Payment...' : 'Recording Payment...'}</span>
                         </>
                       ) : (
                         <>
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>I've Paid ₹{finalTotal}</span>
+                          <span>{isGateway ? `Pay ₹${finalTotal} Securely` : `I've Paid ₹${finalTotal}`}</span>
                         </>
                       )}
                     </button>
                   ) : paymentData.status === 'pending' ? (
                     <div className="p-3 text-center rounded-card bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                      <strong className="block font-bold">Payment marked as sent</strong>
+                      <strong className="block font-bold">{isGateway ? 'Waiting for payment confirmation' : 'Payment marked as sent'}</strong>
                       <p className="text-[11px]">
-                        Waiting for helper to verify credit in their UPI app. Once confirmed, they will buy your items.
+                        {isGateway
+                          ? 'Complete the payment in the Razorpay tab. It confirms automatically — usually seconds.'
+                          : 'Waiting for helper to verify credit in their UPI app. Once confirmed, they will buy your items.'}
                       </p>
                     </div>
                   ) : (
                 <div className="p-3 text-center rounded-card bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
-                      <strong className="block font-bold">✓ Payment confirmed</strong>
+                      <strong className="block font-bold">{isGateway ? '✓ Payment held by Need It' : '✓ Payment confirmed'}</strong>
                       <p className="text-[11px]">
-                        The helper has your payment and is purchasing the items for {order.pickupPoint}.
+                        {isGateway
+                          ? `Released to the helper after the handover OTP at ${order.pickupPoint}.`
+                          : `The helper has your payment and is purchasing the items for ${order.pickupPoint}.`}
                       </p>
                     </div>
                   )}
@@ -980,7 +1016,14 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               {/* Helper Actions */}
               {role === 'helper' && (
                 <>
-                  {paymentData.status === 'pending' ? (
+                  {paymentData.status === 'pending' && isGateway ? (
+                    <div className="p-3 text-center rounded-card bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                      <strong className="block font-bold">Waiting for the customer's payment</strong>
+                      <p className="text-[11px]">
+                        The gateway confirms it automatically — do NOT buy anything until you see "Payment held".
+                      </p>
+                    </div>
+                  ) : paymentData.status === 'pending' ? (
                     <div className="space-y-2">
                       <p className="text-xs text-neutral-ink dark:text-neutral-dark-text font-semibold text-center">
                         Customer marked that they sent ₹{finalTotal}. Check your bank app:

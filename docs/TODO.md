@@ -1,9 +1,10 @@
 # Status & What's Next
 
-Updated 2026-10-12 (evening — pilot model revision, see decisions.md D7).
-Backend code-complete for the pilot. Money model for pilot: **direct UPI
-customer→helper, zero platform money, no commission** — Razorpay/KYC is no
-longer a launch blocker (commission version is post-pilot).
+Updated 2026-10-14 (money model v2 — merchant of record, see decisions.md
+D9). Backend code-complete for the pilot. Money model: **platform collects
+via Razorpay payment links** (base account), webhook marks held, OTP
+triggers release, founder settles payouts manually (UTR). Zero commission
+in pilot (`PLATFORM_CUT_PER_ORDER=0`).
 
 ## Done
 
@@ -32,16 +33,24 @@ longer a launch blocker (commission version is post-pilot).
 
 ## Blockers (founder actions, not code)
 
-1. **Google OAuth client ID** — Google Cloud console → OAuth consent screen →
+1. **Razorpay base account + keys** (D9 — the money blocker): sign up as
+   unregistered individual (PAN + Aadhaar + CKYC OTP + savings account,
+   ~3–4 working days) → get Key ID/Secret → Render env `RAZORPAY_KEY_ID`,
+   `RAZORPAY_KEY_SECRET`, `PAYMENT_PROVIDER=razorpay_base`,
+   `PLATFORM_CUT_PER_ORDER=0`. Then Razorpay dashboard → webhooks → URL
+   `https://needit-api-orfb.onrender.com/api/webhooks/payment/`, event
+   `payment_link.paid`, secret → `RAZORPAY_WEBHOOK_SECRET`. Until then the
+   site runs the `manual` demo provider.
+2. **Google OAuth client ID** — Google Cloud console → OAuth consent screen →
    Web client ID (JS origins: localhost:3000 + the API/Pages URLs). Powers
    sign-in; kills the whole email-verification dependency. Then
    `GOOGLE_CLIENT_ID` on Render + `VITE_GOOGLE_CLIENT_ID` for the web build.
-2. **Cloudinary free account** — cloud name + API key/secret → the three
+3. **Cloudinary free account** — cloud name + API key/secret → the three
    `CLOUDINARY_*` vars. Without them photos are off (flows still work).
-3. **`RENDER_DEPLOY_HOOK_URL` GitHub secret** — wires CI-green → auto-deploy.
-4. **Cloudflare Pages for `web/`** — the visible URL. Then
+4. **`RENDER_DEPLOY_HOOK_URL` GitHub secret** — wires CI-green → auto-deploy.
+5. **Cloudflare Pages for `web/`** — the visible URL. Then
    `CORS_ALLOWED_ORIGINS` + `PUBLIC_WEB_URL` on Render.
-5. **Mobile app source into this repo** — `apps/mobile/` is only the android
+6. **Mobile app source into this repo** — `apps/mobile/` is only the android
    shell. The API's real client is still missing from the monorepo.
 6. **Remove `ADMIN_EMAIL`/`ADMIN_PASSWORD`** from Render after first deploy.
 

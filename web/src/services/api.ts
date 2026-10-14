@@ -292,6 +292,9 @@ export const api = {
       item_cost?: number;
       helper_fee?: number;
       total?: number;
+        // Active provider ("manual" | "razorpay_base") — drives which pay UI
+        // renders: client-composed UPI QR vs gateway payment link.
+        provider?: string;
     }>(`/orders/${orderId}/payment-status/`);
   },
 

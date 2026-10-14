@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from .models import Payment, Payout, PayoutStatus
+from .providers import get_provider
 from .services import (confirm_payment, create_payment, mark_paid,
                        PayoutError, PayoutNotFound, PayoutConflict)
 from apps.orders.models import OrderStatus, Request, RequestItem
@@ -19,9 +20,12 @@ def payment_status(request, order_id):
         return Response({"detail": "Order not found."}, status=404)
     p = Payment.objects.filter(request=order).first()
     if not p:
-        return Response({"status": "none"})
+        # No charge yet — report the ACTIVE provider so clients know which
+        # pay UI to render before the payment row exists.
+        return Response({"status": "none", "provider": get_provider().name})
     return Response({"status": p.status, "item_cost": p.item_cost,
-                     "helper_fee": p.helper_fee, "total": p.total})
+                     "helper_fee": p.helper_fee, "total": p.total,
+                     "provider": p.provider or get_provider().name})
 
 
 @api_view(["POST"])
@@ -53,7 +57,14 @@ def pay(request, order_id):
                 f"and {settings.HELPER_FEE_MAX}."
             )
         }, status=400)
-    payment = create_payment(order, item_cost, helper_fee, str(order.id))
+    try:
+        payment = create_payment(order, item_cost, helper_fee, str(order.id))
+    except RuntimeError:
+        # e.g. gateway provider selected but keys not configured — a config
+        # error, not a customer error; never surface a bare 500.
+        return Response(
+            {"detail": "Online payment is not configured yet. Try again later."},
+            status=503)
     return Response({"status": payment.status, "total": payment.total,
                      "paymentUrl": payment.payment_url or None}, status=201)
 

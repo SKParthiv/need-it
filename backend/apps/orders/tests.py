@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from apps.orders.models import OrderStatus, Request, RequestItem
 from apps.orders import services
@@ -392,4 +392,76 @@ class PaymentCardTests(TestCase):
         cards = [m for m in data if m.get("card")]
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["card"]["upiId"], "helper@okhdfc")
+
+
+@override_settings(PAYMENT_PROVIDER="razorpay_base")
+class PaymentCardGatewayModeTests(TestCase):
+    """Merchant-of-record mode (D9): the card points at the gateway pay
+    flow, NOT the helper's UPI — the customer pays the platform's payment
+    link; the helper's own UPI ID is irrelevant to the customer."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.cust = User.objects.create_user("gc-c@sastra.ac.in", password="x",
+                                             is_verified_student=True)
+        self.helper = User.objects.create_user("gc-h@sastra.ac.in", password="x",
+                                               role="helper", is_verified_student=True,
+                                               upi_id="helper@okhdfc")
+        self.req = Request.objects.create(
+            customer=self.cust, helper=self.helper, status=OrderStatus.ACCEPTED,
+            needed_by=timezone.now(), pickup_point="Gate", expected_total=100)
+        self.i1 = RequestItem.objects.create(request=self.req, name="Bread",
+                                             expected_price=40, actual_price=40)
+        self.i2 = RequestItem.objects.create(request=self.req, name="Milk",
+                                             expected_price=60, actual_price=55)
+        self.client = APIClient()
+        self.client.force_authenticate(self.cust)
+
+    def _cards(self):
+        return [m for m in self.req.messages.filter(is_system_notice=True)
+                if m.card]
+
+    def test_gateway_card_has_no_upi_id(self):
+        resp = self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                                {}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        cards = self._cards()
+        self.assertEqual(len(cards), 1)
+        card = cards[0].card
+        self.assertEqual(card["payMode"], "gateway")
+        self.assertNotIn("upiId", card)
+        self.assertEqual(card["itemCost"], 95)
+        self.assertIn("feeMin", card)
+
+    def test_gateway_card_posted_even_without_helper_upi(self):
+        # The customer never sees the helper's UPI in gateway mode, so a
+        # missing helper upi_id must not block the card (it matters later,
+        # at payout time — the payout console validates then).
+        User.objects.filter(pk=self.helper.pk).update(upi_id="")
+        self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                         {}, format="json")
+        cards = self._cards()
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0].card["payMode"], "gateway")
+
+    def test_gateway_reapproval_dedupes(self):
+        self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                         {}, format="json")
+        self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                         {}, format="json")
+        self.assertEqual(len(self._cards()), 1)
+
+    def test_payment_status_reports_active_provider(self):
+        data = self.client.get(f"/api/orders/{self.req.id}/payment-status/").json()
+        self.assertEqual(data["status"], "none")
+        self.assertEqual(data["provider"], "razorpay_base")
+
+    def test_pay_returns_503_when_gateway_keys_missing(self):
+        # Approve prices first (the pay gate), then attempt the charge with
+        # no RAZORPAY_KEY_ID/SECRET configured — clean 503, never a bare 500.
+        self.client.post(f"/api/requests/{self.req.id}/approve-price/",
+                         {}, format="json")
+        resp = self.client.post(f"/api/orders/{self.req.id}/pay/",
+                                {"helperFee": 30}, format="json")
+        self.assertEqual(resp.status_code, 503)
 
