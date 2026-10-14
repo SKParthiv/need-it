@@ -6,6 +6,43 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D9 — Pilot money v2: merchant of record via Razorpay payment links (2026-10-14)
+
+**Decision:** The platform **collects** the customer's payment (merchant of
+record on a BASE Razorpay account — payment links into the platform's bank
+account). Flow: helper accepts → helper reaches the shop and posts price
+evidence photos → customer approves prices → customer pays the secure link
+(item cost + chosen fee) → **only then** the helper buys → OTP handover →
+payment flips to released → founder settles the helper's payout manually
+(UPI, UTR recorded) from the payout console. The ONLY thing that marks a
+payment `held` is Razorpay's signed webhook — the app never takes the
+customer's word for it. Supersedes D7's "platform touches zero money" for
+the pilot. `PAYMENT_PROVIDER=razorpay_base` on Render; `manual`
+(direct-UPI) stays as the demo/fallback provider.
+
+**Why the reversal:** D7's direct-UPI pilot had no money-side leverage — a
+paid-but-ghosts helper left the customer with only social recourse, and
+"helper never fronts cash" rested on the helper honestly confirming
+receipt. Merchant of record makes both structural: money is provably in
+before the helper spends a rupee, and the OTP is what unlocks the helper's
+payout. Razorpay Route (true splits) remains RBI turnover-gated (D4) — a
+base account collecting into our own bank account is the legal mode until
+then, and manual UPI settlement is what founders already do informally.
+
+**Cost:** (1) Founder becomes the payout desk — every completed order is a
+manual UPI settlement with a UTR (the console makes it one screen).
+(2) Gateway fee (~2%) is absorbed by the platform in pilot —
+`PLATFORM_CUT_PER_ORDER=0` on Render; the flat ₹2 cut built into the payout
+ledger is a one-line env flip when volume justifies it. (3) Refunds on
+cancel-after-payment are manual (Razorpay dashboard). (4) New ops surface:
+webhook URL + secret, key rotation.
+
+**What did NOT change:** the order/payment state machines (states are
+identical — only WHO holds the money changed), the held-before-purchase
+gate, the OTP handover, the trust system.
+
+---
+
 ## D8 — "Ask NEEDIT" AI assistant: deferred to post-pilot (2026-10-14)
 
 **Decision:** The Gemini-based campus assistant (PR #33, closed unmerged)
@@ -31,7 +68,7 @@ that corpus is the eval set. Then ship it exactly as designed above
 
 ---
 
-## D7 — Pilot money: direct UPI customer→helper, no commission yet (2026-10-12)
+## ~~D7 — Pilot money: direct UPI customer→helper, no commission yet (2026-10-12)~~ → superseded by D9 (merchant of record)
 
 **Decision:** The pilot platform touches **zero money**. After price
 approval, the customer pays the helper directly (UPI QR rendered from the

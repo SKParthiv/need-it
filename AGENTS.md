@@ -55,7 +55,10 @@ contract. Read this file BEFORE writing any code.
 ## 5. Pilot scope (what NOT to build)
 
 The do-not-build list in userflow-v2 §8 is law: no commission/gateway UI,
-no custom admin frontend, no shops module, no COD. New external services
-(another console, another quota) need a decisions.md entry FIRST — the
-pilot runs on Django + Postgres + Cloudinary + Google OAuth and nothing
-else without a founder decision.
+no custom admin frontend, no shops module, no COD. Money mode (D9):
+merchant of record via Razorpay payment links (`PAYMENT_PROVIDER` env;
+`manual` direct-UPI is the demo fallback); true splits (Route) are
+deferred per D4. New external services (another console, another quota)
+need a decisions.md entry FIRST — the pilot runs on Django + Postgres +
+Cloudinary + Google OAuth + Razorpay (base account) and nothing else
+without a founder decision.

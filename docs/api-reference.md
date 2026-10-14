@@ -51,8 +51,8 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 
 | Method | Path | Who | Body → Response |
 | --- | --- | --- | --- |
-| GET | `orders/<id>/payment-status/` | participant | — → `{status, item_cost, helper_fee, total}` |
-| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total, paymentUrl?}`. Requires accepted order + all available items price-approved. Idempotent. `paymentUrl` present in gateway mode (`razorpay_base`) — open it, customer pays there |
+| GET | `orders/<id>/payment-status/` | participant | — → `{status, item_cost, helper_fee, total, provider}`. `provider` (`manual`/`razorpay_base`) tells the client which pay UI to render, even before a payment row exists |
+| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total, paymentUrl?}`. Requires accepted order + all available items price-approved. Idempotent. `paymentUrl` present in gateway mode (`razorpay_base`) — open it, customer pays there. **503 when the gateway provider is selected but keys aren't configured** |
 | POST | `orders/<id>/confirm-payment/` | both | manual mode: each side confirms the UPI transfer; both → `held`. **400 in gateway mode** — the signed webhook is the only confirmer |
 | POST | `webhooks/payment/` | Razorpay only | HMAC-SHA256 signature-verified, event-id deduped; `payment_link.paid` flips the order's payment `pending → held` (the escrow gate) |
 

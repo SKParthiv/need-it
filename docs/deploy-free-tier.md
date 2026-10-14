@@ -92,8 +92,13 @@ hook only after Backend CI passes on main (see 2b). Free on a public repo.
 - **At ~1000 users**: you said money exists by then — first upgrades are
   Render Starter ($7/mo, no sleep, more CPU) and Neon Launch ($19/mo). The
   architecture doesn't change, only the plan sizes.
-- **Payment gateway: see TODO.md — Route escrow is gated by RBI turnover rules; pilot runs manual UPI.
-  pilot. Start the KYC *now* in parallel — it's the long pole, not code.
+- **Payment gateway (D9)**: the pilot collects via Razorpay payment links on
+  a BASE account (merchant of record). Route splits stay RBI-gated (D4).
+  Env on Render: `PAYMENT_PROVIDER=razorpay_base`, `RAZORPAY_KEY_ID`,
+  `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
+  `PLATFORM_CUT_PER_ORDER=0` — see TODO.md blocker #1. Start the KYC *now*
+  in parallel — it's the long pole, not code. Until keys exist the site
+  runs the `manual` demo provider.
 - **Branch protection** — parked until there's something deployed to protect.
 
 ## 7. Demo-day checklist

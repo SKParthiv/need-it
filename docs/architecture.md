@@ -60,17 +60,18 @@ The state machine never touches a gateway. It calls the `PaymentProvider`
 interface (`apps/payments/providers.py`); `PAYMENT_PROVIDER` picks the
 implementation.
 
-- **`manual`** (default) — `ManualUPIProvider`: both sides confirm an
+- **`manual`** (code default) — `ManualUPIProvider`: both sides confirm an
   out-of-band UPI transfer; `held` is a record that gates the machine. Zero
-  dependencies — for demos and local dev.
-- **`razorpay_base`** — `RazorpayBaseProvider`: the platform is merchant of
+  dependencies — demo and local-dev fallback.
+- **`razorpay_base`** (the pilot's deployed mode, D9) — `RazorpayBaseProvider`: the platform is merchant of
   record. `/pay` creates a Razorpay Payment Link into the platform's account
   and returns `paymentUrl`; the **signed webhook** (`payment_link.paid`) is
   the only thing that marks money `held`. Release at handover is a ledger
   flip (the money is already ours); the founders settle helpers from the
   payout console (`settles_via_platform=True` → a Payout row per completed
-  order, ₹2 flat platform cut clamped to the helper fee, UPI deep link, UTR
-  recorded). Refunds mirror capture state. See `docs/decisions.md` D3.
+  order, platform cut clamped to the helper fee — `PLATFORM_CUT_PER_ORDER`,
+  **0 in pilot** — UTR recorded). Refunds mirror capture state. See
+  `docs/decisions.md` D9.
 - **`razorpay_route`** (stub) — true gateway escrow. Blocked by RBI's Sept
   2025 PA guidelines: ₹40L domestic turnover (GST-3B) or ₹5L export (FIRC)
   in FY25/FY26, enforced Jan 1 2026 — every licensed aggregator. The stub

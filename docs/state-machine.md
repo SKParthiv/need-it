@@ -30,13 +30,22 @@ and the guarded write means a stale or double action can never corrupt state.
 
 `none → pending → held → released` · `pending → failed` · `held → refunded`
 
-**Pilot semantics: direct UPI, zero platform money.** After the customer
-approves prices, the app shows the helper's UPI QR (rendered client-side
-from the helper's `upi_id`). The customer pays the **helper directly** in
-their own UPI app, then POSTs `pay` (→ `pending`); the helper confirms the
-money arrived (`confirm-payment` → `held`). The platform never holds,
-collects, or forwards anything — "held" means *the helper's own UPI app
-shows the money*. No Razorpay, no KYC, no commission in the pilot.
+**Pilot semantics (D9): merchant of record.** After the customer approves
+prices, `pay` creates a Razorpay **payment link** (item cost + chosen fee)
+into the PLATFORM's account (→ `pending`); the gateway's **signed webhook**
+(`payment_link.paid`) is the only thing that sets `held` — the money is
+provably in before the helper spends a rupee. On OTP handover the ledger
+flips to `released` and a **payout** to the helper is born (`due`);
+the founder settles it manually via UPI and records the UTR
+(`admin/payouts/<id>/mark-paid/`). Zero commission in pilot
+(`PLATFORM_CUT_PER_ORDER=0`). Cancel before purchase → refund via the
+Razorpay dashboard → `refunded`.
+
+**Demo/fallback semantics (`PAYMENT_PROVIDER=manual`):** the customer pays
+the helper directly (UPI QR composed client-side from the helper's
+`upi_id`), both sides attest via `confirm-payment`, and no payout rows are
+created — the platform never touches money. The order machine is
+identical; only who holds the money changes.
 
 | Payment event | Effect on order |
 |---|---|
@@ -47,16 +56,17 @@ shows the money*. No Razorpay, no KYC, no commission in the pilot.
 | Cancel before purchase | Refund → `refunded` |
 
 Post-pilot, the commission version (helper pays the platform a flat fee per
-order via Razorpay) reuses the same provider seam — see decisions.md D7.
+order, deducted from the payout) is a one-line env flip — see decisions.md D9.
 
 ## Money rules
 
 - Charge the **actual confirmed amount** (item cost + helper fee), never the expected-price guess.
 - Price approval is **evidence-based**: the helper attaches a shelf/receipt photo (`evidencePhotoUrl` on the item) when proposing a price; the customer approves what they can see. Photos upload straight to Cloudinary with a server-issued signature — our API never proxies bytes.
-- The customer pays the **helper directly** (UPI, off-platform). The helper
-  confirms receipt before shopping — helpers never front their own cash.
+- The customer pays the **platform's payment link** (merchant of record).
+  Only the gateway's signed webhook marks `held`; the helper buys only
+  after that — helpers never front their own cash.
 - Handover OTP = attestation. The code is born at `mark_purchased`, renders in the API **only to the customer**, and the helper entering it correctly means the items physically changed hands — payment releases in the same guarded transition. 5 wrong codes lock the endpoint (founder unlocks via `/admin/`).
-- Webhooks (post-pilot Razorpay only): verify signature; dedupe on gateway event ID (retries are idempotent).
+- Webhooks: verify signature; dedupe on gateway event ID (retries are idempotent).
 
 ## The three rules
 

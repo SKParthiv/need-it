@@ -62,16 +62,21 @@ States: `open → accepted → purchased → handed_over → completed`
 | 3 | Helper | Accept | `POST /api/requests/<id>/accept/` | `accepted` — atomic lock; loser gets 409 |
 | 4 | Helper | Per item: propose actual price **with a shelf/receipt photo** | photo: §5, then `POST /api/requests/<id>/items/<item_id>/propose-price/` | `accepted`, prices `pending` |
 | 5 | Customer | See photos + prices, approve (or reject → helper revises) | `POST .../items/<item_id>/approve-price/` | all items approved → order payable |
-| 6 | Customer | **Pay the helper directly**: when all items are approved, the server posts a **payment card message into the order chat** (exact payload in §4). The client renders the QR and composes the `upi://` deep link itself — the helper fee is the customer's choice at this moment, within the card's bounds. The customer taps **"Pay in UPI app"** (opens their UPI app with payee + amount pre-filled) or scans the QR, then taps "I've paid" | `POST /api/orders/<id>/pay/` | payment `pending` |
-| 7 | Helper | Confirm the money actually arrived in their UPI app | `POST /api/orders/<id>/confirm-payment/` | payment `held` |
+| 6 | Customer | **Pay the platform (merchant of record, D9)**: when all items are approved, the server posts a **payment card message into the order chat** (exact payload in §4). The customer taps **"Pay securely"** — the backend creates a Razorpay payment link (item cost + chosen fee, within the card's bounds) and the client opens the returned `paymentUrl` (UPI, cards, netbanking) | `POST /api/orders/<id>/pay/` → `{ paymentUrl }` | payment `pending` |
+| 7 | Razorpay | **Signed webhook** (`payment_link.paid`) is the ONLY thing that marks the payment held — the money is provably in the platform account | `POST /api/webhooks/payment/` (gateway→server) | payment `held` |
 | 8 | Helper | Shop, then mark purchased — **the OTP is born here** | `POST /api/requests/<id>/mark-purchased/` | `purchased` |
 | 9 | Customer | Meet the helper, **show** the 4-digit OTP (rendered only to the customer) | `GET /api/requests/<id>/` | — |
 | 10 | Helper | Enter the OTP | `POST /api/requests/<id>/confirm-handover/` `{code}` | `handed_over → completed`, payment `released` |
 
 Rules the backend enforces (clients must respect, never duplicate):
 - Exactly one helper can accept (guarded write; race loser sees 409).
-- `held` payment is the hard gate for `mark-purchased` — a helper who
-  hasn't confirmed receipt cannot proceed. Helpers never front cash.
+- `held` payment is the hard gate for `mark-purchased` — and in
+  merchant-of-record mode only the gateway's signed webhook can set
+  `held`. Money is provably in before the helper spends a rupee.
+- After handover, the payment flips to `released` and a **payout** to the
+  helper is born (`due`) — the founder settles it manually via UPI and
+  records the UTR in the payout console (D9). Zero commission in pilot
+  (`PLATFORM_CUT_PER_ORDER=0`).
 - Wrong OTP × 5 → handover endpoint locks; admin unlocks in `/admin/`.
 - Payment timeout: no payment within `PAYMENT_TIMEOUT_MINUTES` (30) of
   price approval → order auto-returns to `open`, helper cleared, both
@@ -91,14 +96,14 @@ as cards in the thread, and the payment moment lives here too — a
 server-posted **payment card** message (type `payment_card`, payload:
 see below) appears when prices are approved (§3 step 6).
 
-**Payment card payload (shipped, PR #32).** The card arrives as a chat
-message with `isSystemNotice: true` and a `card` object:
+**Payment card payload (PR #32, gateway mode per D9).** The card arrives as
+a chat message with `isSystemNotice: true` and a `card` object:
 
 ```json
 {
   "type": "payment_card",
   "orderId": 14,
-  "upiId": "helper@okhdfc",
+  "payMode": "gateway",
   "itemCost": 95,
   "feeMin": 20, "feeMax": 50, "suggestedFee": 20,
   "currency": "INR",
@@ -106,12 +111,22 @@ message with `isSystemNotice: true` and a `card` object:
 }
 ```
 
-The **client** renders the QR and composes the deep link:
-`upi://pay?pa={upiId}&am={itemCost + chosenFee}&cu=INR&tn={url-encoded note}`.
+`payMode: "gateway"` (merchant of record, the pilot default — D9): the
+card carries **no UPI ID**. The client renders a "Pay securely" button →
+`POST /api/orders/<id>/pay/` with the chosen fee → opens the returned
+`paymentUrl`. Razorpay's webhook marks the payment `held`; the client
+polls `payment-status` while `pending`.
+
+`payMode: "upi"` (manual demo provider, `PAYMENT_PROVIDER=manual`): the
+card also carries `upiId` (the helper's), the client renders the QR and
+composes `upi://pay?pa={upiId}&am={itemCost + chosenFee}&cu=INR&tn={note}`
+itself, and both sides attest via `confirm-payment`.
+
 `itemCost` excludes unavailable items. A repriced re-approval posts a
 fresh card — **the latest card wins**; identical re-approvals post
-nothing. If the helper has no `upi_id`, a plain system notice is posted
-instead and the client must not render a pay button.
+nothing. In `upi` mode, a helper with no `upi_id` gets a plain system
+notice instead of a card (no pay button). In `gateway` mode the helper's
+`upi_id` only matters later, at payout time.
 
 ## 5. Photos (Cloudinary, direct upload)
 
