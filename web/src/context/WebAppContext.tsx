@@ -44,12 +44,13 @@ interface WebAppContextType {
   getOrderById: (orderId: string) => Order | undefined;
   chats: Record<string, ChatConversation>;
   getChatByOrderId: (orderId: string) => ChatConversation | undefined;
-  sendMessage: (orderId: string, text: string) => Promise<void>;
+  sendMessage: (orderId: string, text: string, photoUrl?: string) => Promise<void>;
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
   proposePrice: (orderId: string, itemId: string, price: number, evidencePhotoUrl?: string) => Promise<void>;
   approvePrices: (orderId: string) => Promise<void>;
   payOrder: (orderId: string, fee?: number) => Promise<void>;
+  confirmPayment: (orderId: string) => Promise<void>;
   confirmHandover: (orderId: string, code: string) => Promise<void>;
 }
 
@@ -343,6 +344,17 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const confirmPayment = async (orderId: string) => {
+    // Either side attests the out-of-band UPI transfer happened (customer:
+    // "I've paid", helper: "received"). The payment turns held once BOTH
+    // have confirmed — the backend owns that rule.
+    const numOrderId = parseInt(orderId, 10);
+    if (!isNaN(numOrderId)) {
+      await api.confirmPayment(numOrderId);
+      refreshOrders();
+    }
+  };
+
   const confirmHandover = async (orderId: string, code: string) => {
     const numOrderId = parseInt(orderId, 10);
     if (!isNaN(numOrderId)) {
@@ -355,12 +367,13 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const getChatByOrderId = (orderId: string) => chats[orderId];
 
-  const sendMessage = async (orderId: string, text: string) => {
+  const sendMessage = async (orderId: string, text: string, photoUrl?: string) => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       senderRole: role === 'customer' ? 'customer' : 'helper',
       senderName: role === 'customer' ? currentUser.name : 'Helper Priya',
       text,
+      photoUrl,
       timestamp: 'Just now',
     };
 
@@ -386,7 +399,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const numericId = parseInt(orderId, 10);
     if (!isNaN(numericId)) {
       try {
-        await api.sendMessage(numericId, text);
+        await api.sendMessage(numericId, text, photoUrl);
       } catch (e) {
         console.warn('Backend send message notice:', e);
       }
@@ -422,6 +435,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         proposePrice,
         approvePrices,
         payOrder,
+          confirmPayment,
         confirmHandover,
       }}
     >

@@ -276,6 +276,15 @@ export const api = {
     });
   },
 
+    // Trust: one rating per order per rater, completed orders only (PR #34).
+    // 409 = already rated — callers treat that as "submitted".
+    async rate(orderId: string | number, stars: number, note = '') {
+      return apiFetch<{ detail?: string }>(`/orders/${orderId}/rate/`, {
+        method: 'POST',
+        body: JSON.stringify({ stars, note }),
+      });
+    },
+
   // --- Payments ---
   async getPaymentStatus(orderId: string | number) {
     return apiFetch<{
@@ -304,12 +313,12 @@ export const api = {
     return apiFetch<any[]>(`/orders/${orderId}/messages/`);
   },
 
-  async sendMessage(orderId: string | number, text: string) {
-    return apiFetch<any>(`/orders/${orderId}/messages/`, {
-      method: 'POST',
-      body: JSON.stringify({ text }),
-    });
-  },
+    async sendMessage(orderId: string | number, text: string, photoUrl?: string) {
+      return apiFetch<any>(`/orders/${orderId}/messages/`, {
+        method: 'POST',
+        body: JSON.stringify(photoUrl ? { text, photoUrl } : { text }),
+      });
+    },
 
   // --- Payouts (merchant of record) ---
   async getAdminPayouts(status: 'due' | 'paid' | 'all' = 'due') {
