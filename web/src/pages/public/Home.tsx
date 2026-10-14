@@ -195,7 +195,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                   </div>
                   <div className="text-left">
                     <span className="font-bold text-neutral-ink dark:text-neutral-dark-text block">Live Campus Order Handover</span>
-                    <span className="text-[11px] text-neutral-secondary">KC Canteen → Boys’ Hostel Area (8 mins)</span>
+                    <span className="text-[11px] text-neutral-secondary">Canopy Canteen → Ananda Vihar (BH) (8 mins)</span>
                   </div>
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-beacon ml-1" />
                 </div>
@@ -271,7 +271,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                           A4 Ruled Notebook + Blue Pens
                         </h4>
                         <p className="text-xs text-neutral-secondary dark:text-neutral-dark-secondary">
-                          Bits & Bytes Stationery • Qty: 2
+                          Central Library Stationery • Qty: 2
                         </p>
                       </div>
                       <span className="text-sm font-bold font-mono text-neutral-ink dark:text-neutral-dark-text">₹180</span>
@@ -293,7 +293,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                       <VerifiedBadge size="sm" showText={false} />
                     </div>
                     <p className="text-xs text-brand-teal-dark dark:text-emerald-200">
-                      <strong>Priya K.</strong> (Hostel Block C) has locked this request and is walking to Bits & Bytes Stationery.
+                      <strong>Priya K.</strong> (Vaidehi / VK) has locked this request and is walking to Central Library Stationery.
                     </p>
                   </div>
                 )}
@@ -312,7 +312,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         <QrCode className="w-6 h-6" />
                       </div>
                       <div>
-                        <span className="text-[11px] font-bold text-neutral-ink dark:text-neutral-dark-text block">Bits & Bytes UPI Standee</span>
+                        <span className="text-[11px] font-bold text-neutral-ink dark:text-neutral-dark-text block">Central Library UPI Standee</span>
                         <span className="text-[10px] text-neutral-secondary">Pay ₹180 direct to shop</span>
                       </div>
                     </div>
@@ -331,7 +331,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                         ))}
                       </div>
                     </div>
-                    <span className="text-xs text-neutral-secondary font-medium">Boys’ Hostel Area</span>
+                    <span className="text-xs text-neutral-secondary font-medium">Ananda Vihar (BH)</span>
                   </div>
                 )}
 

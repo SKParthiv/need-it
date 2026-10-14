@@ -48,6 +48,8 @@ export interface Order {
   createdAt: string;
   helperId?: string;
   helperName?: string;
+  helperUpiId?: string;
+  paymentStatus?: string;
   handoverCode?: string; // customer-only, present once the order is purchased
   cancellationReason?: string;
   ratingGiven?: number;

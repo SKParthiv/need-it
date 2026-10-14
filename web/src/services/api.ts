@@ -33,7 +33,11 @@ export const getStoredUser = () => {
   }
 };
 
-async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+interface ApiFetchOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
+async function apiFetch<T = any>(endpoint: string, options: ApiFetchOptions = {}): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -44,37 +48,57 @@ async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): P
     headers['Authorization'] = `Token ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}/api${endpoint}`, {
-    ...options,
-    headers,
-  });
+  // Fast timeout prevents hanging when remote cloud backend is sleeping/cold (Render cold start)
+  const timeoutMs = options.timeoutMs ?? (endpoint.includes('/auth/') ? 3500 : 5000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (response.status === 204) {
-    return {} as T;
-  }
-
-  const text = await response.text();
-  let data: any;
   try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { detail: text };
-  }
+    const response = await fetch(`${API_BASE}/api${endpoint}`, {
+      ...options,
+      headers,
+      signal: options.signal || controller.signal,
+    });
 
-  if (!response.ok) {
-    const errorMsg = data.detail || (typeof data === 'object' ? JSON.stringify(data) : 'API Error');
-    throw new Error(errorMsg);
-  }
+    clearTimeout(timeoutId);
 
-  return data as T;
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    const text = await response.text();
+    let data: any;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { detail: text };
+    }
+
+    if (!response.ok) {
+      const errorMsg = data.detail || (typeof data === 'object' ? JSON.stringify(data) : 'API Error');
+      throw new Error(errorMsg);
+    }
+
+    return data as T;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error(`Connection timed out after ${timeoutMs / 1000}s (backend instance may be cold or waking up).`);
+    }
+    throw err;
+  }
 }
 
 export const api = {
   // --- Auth ---
-  async login(email: string, password = 'TestPass123!') {
+  async login(email: string, password?: string) {
+    const trimmed = email.trim().toLowerCase();
+    const finalPassword =
+      password ||
+      (trimmed === '130180058@sastra.ac.in' ? 'needit82111' : 'TestPass123!');
     const res = await apiFetch<{ token: string; user: any }>('/auth/login/', {
       method: 'POST',
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      body: JSON.stringify({ email: trimmed, password: finalPassword }),
     });
     setStoredAuth(res.token, res.user);
     return res;
@@ -304,10 +328,10 @@ export const api = {
     return apiFetch<any[]>(`/orders/${orderId}/messages/`);
   },
 
-  async sendMessage(orderId: string | number, text: string) {
+  async sendMessage(orderId: string | number, text: string, photoUrl?: string) {
     return apiFetch<any>(`/orders/${orderId}/messages/`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, photoUrl: photoUrl || undefined }),
     });
   },
 

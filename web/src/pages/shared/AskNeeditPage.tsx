@@ -9,6 +9,17 @@ interface AskNeeditPageProps {
 export const AskNeeditPage: React.FC<AskNeeditPageProps> = ({ onNavigate }) => {
   const [query, setQuery] = useState('');
 
+  const filteredShops = mockShops.filter((s) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.location.toLowerCase().includes(q) ||
+      s.categories.some((c) => c.toLowerCase().includes(q)) ||
+      s.popularItems.some((it) => it.name.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="w-full max-w-content mx-auto px-4 sm:px-6 py-8 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -41,6 +52,7 @@ export const AskNeeditPage: React.FC<AskNeeditPageProps> = ({ onNavigate }) => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search campus shops, items (e.g. notebook, tea, juice)..."
           aria-label="Search campus essentials and shops"
           className="w-full h-12 pl-10 pr-4 rounded-btn bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo shadow-sm"
         />
@@ -48,7 +60,12 @@ export const AskNeeditPage: React.FC<AskNeeditPageProps> = ({ onNavigate }) => {
 
       {/* Suggested Shops */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {mockShops.map((shop) => (
+        {filteredShops.length === 0 ? (
+          <div className="col-span-full p-8 text-center rounded-panel bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-slate-800 text-xs text-neutral-secondary">
+            No campus shops or items matched "{query}". Try searching for Canopy, Library, or notebook.
+          </div>
+        ) : (
+          filteredShops.map((shop) => (
           <div
             key={shop.id}
             className="p-5 rounded-panel bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-neutral-dark-border shadow-e1 hover:shadow-e2 transition-shadow space-y-3"
@@ -108,7 +125,7 @@ export const AskNeeditPage: React.FC<AskNeeditPageProps> = ({ onNavigate }) => {
               </div>
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </div>
   );

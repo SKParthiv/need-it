@@ -117,19 +117,26 @@ export const SiteNavigatorHUD: React.FC<SiteNavigatorHUDProps> = ({
         { label: 'Offline Banner View', path: '/special/offline' },
         { label: 'Scheduled Maintenance', path: '/special/maintenance' },
       ]
+    },
+    {
+      group: 'H. Dev Control Room',
+      links: [
+        { label: '⚙️ Dev Admin Control Room', path: '/dev-admin' },
+      ]
     }
   ];
 
   return (
     <>
       {/* Floating Trigger Pill */}
-      <div className="fixed bottom-4 right-4 z-[400] flex items-center gap-2">
+      <div className="fixed bottom-20 md:bottom-4 right-3 sm:right-4 z-[400] flex items-center gap-2">
         <button
           onClick={() => setIsOpen(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-neutral-ink text-white dark:bg-brand-indigo dark:text-white shadow-e3 hover:scale-105 active:scale-95 transition-all text-xs font-semibold border border-white/20"
+          className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full bg-neutral-ink text-white dark:bg-brand-indigo dark:text-white shadow-e3 hover:scale-105 active:scale-95 transition-all text-xs font-semibold border border-white/20 backdrop-blur-sm"
         >
-          <Layers className="w-4 h-4 text-brand-coral" />
-          <span>Site Master Navigator</span>
+          <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-coral" />
+          <span className="hidden sm:inline">Site Master Navigator</span>
+          <span className="sm:hidden text-[11px]">Navigator</span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         </button>
       </div>

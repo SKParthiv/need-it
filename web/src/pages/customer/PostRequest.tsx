@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -10,207 +10,442 @@ import {
   CheckCircle2,
   ShieldCheck,
   Zap,
+  ShoppingBag,
+  Store,
   Sparkles,
-  Info
 } from 'lucide-react';
-import { campusPickupPoints, prohibitedItemsList } from '../../data/mockData';
+import { campusPickupPoints } from '../../data/mockData';
 import { useWebApp } from '../../context/WebAppContext';
+import { usePlatformConfig } from '../../context/DevAdminContext';
 
 interface PostRequestProps {
   onNavigate: (path: string) => void;
   onPostSuccess: (newOrderId: string) => void;
 }
 
+interface ErrandItemInput {
+  id: string;
+  name: string;
+  quantity: number;
+  expectedPrice: number;
+  notes: string;
+  category: 'Food' | 'Snacks' | 'Personal care' | 'Stationery' | 'Academic supplies';
+}
+
+const POPULAR_CAMPUS_PRESETS = [
+  { name: 'A4 Spiral Notebook', price: 60, category: 'Stationery' as const },
+  { name: 'Blue Gel Pens (Pack of 3)', price: 45, category: 'Stationery' as const },
+  { name: 'Veg Puff + Cold Coffee', price: 55, category: 'Food' as const },
+  { name: 'Biscuits & Cookies', price: 30, category: 'Snacks' as const },
+  { name: 'Paracetamol & Bandages', price: 35, category: 'Personal care' as const },
+  { name: 'Engineering Calculator FX-82MS', price: 620, category: 'Academic supplies' as const },
+];
+
 export const PostRequest: React.FC<PostRequestProps> = ({
   onNavigate,
-  onPostSuccess
+  onPostSuccess,
 }) => {
   const { addOrder, currentUser } = useWebApp();
-  const [currentStep, setCurrentStep] = useState(1);
+  const { getConfig } = usePlatformConfig();
 
-  // Form State
-  const [items, setItems] = useState([
-    { name: '', quantity: 1, expectedPrice: '', notes: '' }
+  // Platform configs
+  const isPostingAllowed = getConfig<boolean>('flag.requests_posting') ?? true;
+  const isStrictVegEnforced = getConfig<boolean>('flag.strict_veg_filter') ?? true;
+  const maxItemsAllowed = getConfig<number>('orders.max_items_per_request') ?? 10;
+  const maxOrderValueAllowed = getConfig<number>('orders.max_order_value_inr') ?? 1000;
+
+  // Progressive Steps: 1: Items -> 2: Pickup & Timing -> 3: Review & Confirm
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+  // STEP 1 STATE: Repeating Item Cards
+  const [items, setItems] = useState<ErrandItemInput[]>([
+    {
+      id: `item-${Date.now()}-0`,
+      name: '',
+      quantity: 1,
+      expectedPrice: 40,
+      notes: '',
+      category: 'Food',
+    },
   ]);
   const [prohibitedError, setProhibitedError] = useState<string | null>(null);
 
-  const [category, setCategory] = useState<string>('Stationery');
-  const [neededByTime, setNeededByTime] = useState('Today, 7:30 PM');
-  const [isUrgent, setIsUrgent] = useState(false);
+  // STEP 2 STATE: Pickup (Profile-based default) & Timing Presets (ASAP / Tonight / Tomorrow evening)
+  const [pickupPoint, setPickupPoint] = useState<string>(
+    currentUser.pickupPoint || campusPickupPoints[0].name
+  );
+  const [searchLocation, setSearchLocation] = useState<string>('');
+  const [timePreset, setTimePreset] = useState<'ASAP' | 'Tonight' | 'Tomorrow evening'>('ASAP');
+  const [preferredStore, setPreferredStore] = useState<string>('Canopy Canteen & Refreshments');
 
-  const [alternativesAllowed, setAlternativesAllowed] = useState(true);
-  const [budgetLimit, setBudgetLimit] = useState('250');
-  const [brandNotes, setBrandNotes] = useState('Any reputable brand is fine if Classmate is out of stock');
+  // Filtered 13 campus locations
+  const filteredPickupLocations = useMemo(() => {
+    if (!searchLocation.trim()) return campusPickupPoints;
+    const q = searchLocation.toLowerCase();
+    return campusPickupPoints.filter((p) => p.name.toLowerCase().includes(q));
+  }, [searchLocation]);
 
-  const [pickupPoint, setPickupPoint] = useState(campusPickupPoints[2].name);
-
-  // Suggested Fee (Pilot range ₹20 - ₹50)
-  const suggestedFee = isUrgent ? 45 : 30;
-  const sizeTag: 'S' | 'M' | 'L' = items.length > 2 ? 'M' : 'S';
-
-  const categories = [
-    'Food',
-    'Snacks',
-    'Personal care',
-    'Stationery',
-    'Academic supplies'
-  ];
-
-  // Prohibited items keywords
-  const checkProhibited = (text: string) => {
+  // Strict Vegetarian & Banned Items Check
+  const checkProhibitedTerms = (text: string): string | null => {
     const lower = text.toLowerCase();
-    
-    // Strict non-veg prohibition rule
-    const nonVegKeywords = [
-      'chicken', 'meat', 'mutton', 'fish', 'egg', 'eggs', 'non-veg', 'nonveg', 'non veg',
-      'beef', 'pork', 'seafood', 'prawn', 'prawns', 'crab', 'shawarma', 'biryani (non-veg)'
-    ];
-    for (const nv of nonVegKeywords) {
-      if (lower.includes(nv)) {
-        return `"${nv}" is strictly prohibited. Non-vegetarian food items are NOT permitted on campus premises.`;
+
+    if (isStrictVegEnforced) {
+      const nonVegKeywords = [
+        'chicken', 'meat', 'mutton', 'fish', 'egg', 'eggs', 'non-veg', 'nonveg', 'non veg',
+        'beef', 'pork', 'seafood', 'prawn', 'prawns', 'crab', 'shawarma', 'biryani (non-veg)',
+        'omelette', 'omlet', 'bacon', 'ham'
+      ];
+      for (const nv of nonVegKeywords) {
+        if (lower.includes(nv)) {
+          return `"${nv}" is strictly prohibited. Non-vegetarian food items are NOT allowed anywhere on SASTRA campus premises.`;
+        }
       }
     }
 
-    const banned = ['alcohol', 'beer', 'vodka', 'whiskey', 'wine', 'cigarette', 'vape', 'tobacco', 'weed', 'knife', 'drug', 'medicine', 'prescription'];
-    for (const b of banned) {
+    const bannedSubstances = [
+      'alcohol', 'beer', 'vodka', 'whiskey', 'wine', 'cigarette', 'cigarettes', 'vape',
+      'tobacco', 'weed', 'knife', 'knives', 'drug', 'drugs', 'prescription'
+    ];
+    for (const b of bannedSubstances) {
       if (lower.includes(b)) {
-        return `"${b}" is prohibited under university campus rules. Orders containing banned substances cannot be posted.`;
+        return `"${b}" is prohibited by university regulations. Orders for restricted substances cannot be posted.`;
       }
     }
+
     return null;
   };
 
-  const handleItemChange = (index: number, field: string, value: any) => {
+  const handleItemNameChange = (index: number, newName: string) => {
     const updated = [...items];
-    (updated[index] as any)[field] = value;
+    updated[index].name = newName;
     setItems(updated);
 
-    if (field === 'name') {
-      const err = checkProhibited(value);
-      setProhibitedError(err);
-    }
+    const error = checkProhibitedTerms(newName);
+    setProhibitedError(error);
+  };
+
+  const handleItemQuantityChange = (index: number, delta: number) => {
+    const updated = [...items];
+    const newQty = Math.max(1, Math.min(10, updated[index].quantity + delta));
+    updated[index].quantity = newQty;
+    setItems(updated);
+  };
+
+  const handleItemPriceChange = (index: number, priceStr: string) => {
+    const updated = [...items];
+    const num = Math.max(0, parseInt(priceStr, 10) || 0);
+    updated[index].expectedPrice = num;
+    setItems(updated);
+  };
+
+  const handleItemCategoryChange = (index: number, cat: ErrandItemInput['category']) => {
+    const updated = [...items];
+    updated[index].category = cat;
+    setItems(updated);
+  };
+
+  const handleItemNotesChange = (index: number, notes: string) => {
+    const updated = [...items];
+    updated[index].notes = notes;
+    setItems(updated);
   };
 
   const addItemRow = () => {
-    setItems([...items, { name: '', quantity: 1, expectedPrice: '', notes: '' }]);
+    if (items.length >= maxItemsAllowed) return;
+    setItems([
+      ...items,
+      {
+        id: `item-${Date.now()}-${items.length}`,
+        name: '',
+        quantity: 1,
+        expectedPrice: 30,
+        notes: '',
+        category: 'Food',
+      },
+    ]);
   };
 
   const removeItemRow = (idx: number) => {
     if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== idx));
+      const remaining = items.filter((_, i) => i !== idx);
+      setItems(remaining);
+      let foundErr: string | null = null;
+      for (const it of remaining) {
+        const e = checkProhibitedTerms(it.name);
+        if (e) {
+          foundErr = e;
+          break;
+        }
+      }
+      setProhibitedError(foundErr);
     }
   };
 
+  const applyPresetItem = (preset: typeof POPULAR_CAMPUS_PRESETS[0]) => {
+    if (items.length === 1 && items[0].name.trim() === '') {
+      setItems([
+        {
+          id: items[0].id,
+          name: preset.name,
+          quantity: 1,
+          expectedPrice: preset.price,
+          notes: '',
+          category: preset.category,
+        },
+      ]);
+    } else if (items.length < maxItemsAllowed) {
+      setItems([
+        ...items,
+        {
+          id: `item-${Date.now()}-${items.length}`,
+          name: preset.name,
+          quantity: 1,
+          expectedPrice: preset.price,
+          notes: '',
+          category: preset.category,
+        },
+      ]);
+    }
+  };
+
+  // Calculations
+  const calculatedItemsTotal = useMemo(() => {
+    return items.reduce((sum, it) => sum + it.expectedPrice * it.quantity, 0);
+  }, [items]);
+
+  const isValueExceeded = calculatedItemsTotal > maxOrderValueAllowed;
+  const isFirstItemEmpty = items[0].name.trim().length === 0;
+
+  const getPresetLabel = (preset: 'ASAP' | 'Tonight' | 'Tomorrow evening'): string => {
+    switch (preset) {
+      case 'ASAP':
+        return 'ASAP (Within 45 mins, Rush)';
+      case 'Tonight':
+        return 'Tonight (Before 9:00 PM)';
+      case 'Tomorrow evening':
+        return 'Tomorrow evening (Before 8:00 PM)';
+    }
+  };
+
+  // Submit Order - One Confirmation Action on Final Review
   const handleSubmitOrder = () => {
+    if (prohibitedError || isValueExceeded || isFirstItemEmpty) return;
+
     const validItems = items.filter((it) => it.name.trim().length > 0);
-    const orderItems = validItems.length > 0 ? validItems : items;
+    const primaryCategory = validItems[0]?.category || 'Food';
+    const neededByText = getPresetLabel(timePreset);
 
-    const calculatedItemCost = orderItems.reduce(
-      (sum, it) => sum + (Number(it.expectedPrice) || 40) * (Number(it.quantity) || 1),
-      0
-    );
-
-    const createdOrder = addOrder({
+    const newOrder = addOrder({
       customerName: currentUser.name,
       customerAlias: currentUser.alias || 'Student Requester',
-      customerHostel: currentUser.hostel || 'Hostel Block A',
+      customerHostel: currentUser.hostel || 'Ananda Vihar (BH)',
       pickupPoint,
-      items: orderItems.map((it, idx) => ({
-        id: `item-${Date.now()}-${idx}`,
-        name: it.name.trim() || 'Campus essentials',
-        quantity: Number(it.quantity) || 1,
-        expectedPrice: Number(it.expectedPrice) || 40,
-        actualPrice: Number(it.expectedPrice) || 40,
-        notes: it.notes || brandNotes,
-        category: category,
+      items: validItems.map((it) => ({
+        id: it.id,
+        name: it.name.trim(),
+        quantity: it.quantity,
+        expectedPrice: it.expectedPrice,
+        actualPrice: it.expectedPrice,
+        notes: it.notes || '',
+        category: it.category,
         status: 'pending',
       })),
-      category: category as any,
-      sizeTag,
-      neededBy: neededByTime,
-      isUrgent,
+      category: primaryCategory as any,
+      sizeTag: validItems.length > 2 ? 'M' : 'S',
+      neededBy: neededByText,
+      isUrgent: timePreset === 'ASAP',
       isWaitingLong: false,
-      helperFee: suggestedFee,
-      itemCost: calculatedItemCost,
-      totalCost: calculatedItemCost + suggestedFee,
+      suggestedStore: preferredStore,
+      helperFee: 0, // Fee is settled directly via UPI after price approval per v2 contract
+      itemCost: calculatedItemsTotal,
+      totalCost: calculatedItemsTotal,
       status: 'open',
     });
 
-    onPostSuccess(createdOrder.id);
-    onNavigate(`/app/orders/${createdOrder.id}`);
+    onPostSuccess(newOrder.id);
+    onNavigate(`/app/orders/${newOrder.id}`);
   };
+
+  // Graceful kill switch banner if admin paused requests
+  if (!isPostingAllowed) {
+    return (
+      <div className="w-full max-w-xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-16 h-16 mx-auto rounded-full bg-rose-950/20 text-rose-500 border border-rose-800/40 flex items-center justify-center text-2xl">
+          ⏸️
+        </div>
+        <h2 className="font-heading font-bold text-2xl text-neutral-ink dark:text-neutral-dark-text">
+          Errand Posting Temporarily Paused
+        </h2>
+        <p className="text-sm text-neutral-secondary max-w-md mx-auto">
+          The campus administration has temporarily locked new errand submissions. Please check back shortly or review ongoing orders in your dashboard.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      {/* Stepper Progress Bar (6 Steps) */}
-      <div className="space-y-2">
-        <div className="flex justify-between items-center text-xs font-semibold">
-          <span className="text-neutral-secondary">
-            Step {currentStep} of 6: {
-              ['Add items', 'Category', 'Time window', 'Preferences', 'Pickup point', 'Review & fee'][currentStep - 1]
-            }
-          </span>
-          <span className="text-brand-indigo dark:text-brand-indigo-darkmode font-mono">
-            {Math.round((currentStep / 6) * 100)}%
-          </span>
-        </div>
-        <div className="h-2 w-full bg-neutral-surface-alt dark:bg-slate-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-brand-indigo transition-all duration-300"
-            style={{ width: `${(currentStep / 6) * 100}%` }}
-          />
+      {/* Top Header & Breadcrumb */}
+      <div>
+        <button
+          type="button"
+          onClick={() => onNavigate('/app/home')}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink mb-3 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Dashboard</span>
+        </button>
+        <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-neutral-ink dark:text-neutral-dark-text">
+          Post an Errand Request
+        </h1>
+        <p className="text-xs sm:text-sm text-neutral-secondary">
+          Request items from campus canteens and stores for peer delivery.
+        </p>
+      </div>
+
+      {/* Progressive Step Progress Indicator */}
+      <div className="bg-white dark:bg-neutral-dark-card rounded-panel border border-neutral-border dark:border-neutral-dark-border p-3 sm:p-4 shadow-sm">
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setCurrentStep(1)}
+            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+              currentStep === 1
+                ? 'bg-brand-indigo text-white shadow-sm'
+                : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+              1
+            </span>
+            <span className="truncate">Items</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!isFirstItemEmpty && !prohibitedError) setCurrentStep(2);
+            }}
+            disabled={isFirstItemEmpty || !!prohibitedError}
+            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+              currentStep === 2
+                ? 'bg-brand-indigo text-white shadow-sm'
+                : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800 disabled:opacity-40'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+              2
+            </span>
+            <span className="truncate">Pickup & Timing</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!isFirstItemEmpty && !prohibitedError) setCurrentStep(3);
+            }}
+            disabled={isFirstItemEmpty || !!prohibitedError}
+            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+              currentStep === 3
+                ? 'bg-brand-indigo text-white shadow-sm'
+                : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800 disabled:opacity-40'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+              3
+            </span>
+            <span className="truncate">Review</span>
+          </button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-neutral-dark-card rounded-panel border border-neutral-border dark:border-neutral-dark-border p-6 sm:p-8 shadow-e2 space-y-6">
-        {/* STEP 1: Add Items */}
+      {/* Main Wizard Container */}
+      <div className="bg-white dark:bg-neutral-dark-card rounded-2xl border border-neutral-border dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
+
+        {/* ======================================================== */}
+        {/* STEP 1: REPEATING ITEM CARDS & STRICT VEG VALIDATION    */}
+        {/* ======================================================== */}
         {currentStep === 1 && (
-          <div className="space-y-5">
+          <div className="space-y-6 animate-fadeIn">
             <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                What items do you need?
+              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-brand-indigo" />
+                <span>What items do you need?</span>
               </h2>
-              <p className="text-xs text-neutral-secondary mb-2">
-                Specify item names, estimated store prices, and quantity.
+              <p className="text-xs text-neutral-secondary mt-1">
+                Add each errand item, estimated price, and optional flavor/brand notes.
               </p>
-              <div className="p-2.5 rounded-input bg-semantic-danger-tint/60 dark:bg-semantic-danger/15 border border-semantic-danger/30 text-xs text-semantic-danger dark:text-semantic-danger-dark font-medium flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-semantic-danger" />
-                <span>Strict Rule: Any non-vegetarian items (meat, chicken, fish, egg, etc.) are strictly prohibited.</span>
+            </div>
+
+            {/* MANDATORY VEGETARIAN POLICY BANNER */}
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 text-xs flex items-start gap-2.5">
+              <span className="text-base shrink-0">🌱</span>
+              <div>
+                <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
+                  Strict Campus Mandate: 100% Vegetarian Only
+                </span>
+                <p className="text-emerald-800 dark:text-emerald-300/90 text-[11px] mt-0.5">
+                  SASTRA University regulations strictly prohibit all non-vegetarian items (meat, chicken, fish, egg, seafood). Non-veg requests will be rejected.
+                </p>
               </div>
             </div>
 
-            {/* Inline Prohibited Error Warning (Section 10.4: field border colour + message slides down 150ms) */}
+            {/* Prohibited Alert when user types non-veg or banned word */}
             {prohibitedError && (
-              <div className="p-3.5 rounded-input bg-semantic-danger-tint border border-semantic-danger/30 text-xs text-semantic-danger flex items-start gap-2 animate-shake error-msg-enter">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2.5 animate-shake">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
                 <div>
-                  <span className="font-bold block">Prohibited Item Detected</span>
+                  <span className="font-bold block">Policy Violation Detected</span>
                   <p>{prohibitedError}</p>
                 </div>
               </div>
             )}
 
+            {/* Popular Quick-Add Presets */}
+            <div>
+              <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-secondary font-bold block mb-2">
+                Popular Quick-Add Items:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {POPULAR_CAMPUS_PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => applyPresetItem(p)}
+                    className="px-2.5 py-1.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-body dark:text-slate-200 hover:border-brand-indigo hover:text-brand-indigo transition-colors flex items-center gap-1.5"
+                  >
+                    <span>+</span>
+                    <span>{p.name}</span>
+                    <span className="font-mono text-[10px] text-neutral-secondary">₹{p.price}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Repeating Item Cards */}
             <div className="space-y-4">
               {items.map((item, idx) => (
                 <div
-                  key={idx}
-                  className="p-4 rounded-card bg-neutral-surface-alt/50 dark:bg-slate-800/50 border border-neutral-border dark:border-slate-700 space-y-3"
+                  key={item.id}
+                  className="p-4 rounded-xl bg-neutral-surface-alt/60 dark:bg-slate-800/40 border border-neutral-border dark:border-slate-700 space-y-3"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-neutral-secondary">
+                    <span className="text-xs font-bold text-brand-indigo font-mono">
                       Item #{idx + 1}
                     </span>
                     {items.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeItemRow(idx)}
-                        className="text-semantic-danger hover:text-red-700 text-xs flex items-center gap-1"
+                        className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 font-semibold transition-colors"
                       >
-                        <Trash2 className="w-3.5 h-3.5" /> Remove
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
                       </button>
                     )}
                   </div>
 
+                  {/* Item Name Input */}
                   <div>
                     <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
                       Item Name *
@@ -219,362 +454,459 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                       type="text"
                       required
                       value={item.name}
-                      onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                      className={`w-full h-11 px-3 rounded-input bg-white dark:bg-slate-800 border text-sm focus:outline-none transition-colors duration-150 ${
-                        prohibitedError && idx === 0
-                          ? 'border-semantic-danger ring-1 ring-semantic-danger/30'
-                          : 'border-neutral-border dark:border-slate-700 focus:ring-2 focus:ring-brand-indigo'
-                      }`}
+                      onChange={(e) => handleItemNameChange(idx, e.target.value)}
+                      placeholder="e.g. A4 Ruled Notebook, Cold Coffee, Veg Puff"
+                      className="w-full h-11 px-3.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-medium text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Quantity & Estimated Price */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Quantity with +/- Stepper */}
                     <div>
                       <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
                         Quantity
                       </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(idx, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-full h-11 px-3 rounded-input bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                      />
+                      <div className="flex items-center border border-neutral-border dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800 h-11">
+                        <button
+                          type="button"
+                          onClick={() => handleItemQuantityChange(idx, -1)}
+                          className="px-3 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
+                        >
+                          -
+                        </button>
+                        <span className="flex-1 text-center font-mono font-bold text-xs">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleItemQuantityChange(idx, 1)}
+                          className="px-3 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
 
+                    {/* Estimated Unit Price */}
                     <div>
                       <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                        Expected Price (₹) *
+                        Estimated Price (₹) *
                       </label>
-                      <input
-                        type="number"
-                        value={item.expectedPrice}
-                        onChange={(e) => handleItemChange(idx, 'expectedPrice', e.target.value)}
-                        className="w-full h-11 px-3 rounded-input bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-3 text-xs text-neutral-secondary font-mono">₹</span>
+                        <input
+                          type="number"
+                          min={5}
+                          max={maxOrderValueAllowed}
+                          value={item.expectedPrice || ''}
+                          onChange={(e) => handleItemPriceChange(idx, e.target.value)}
+                          className="w-full h-11 pl-7 pr-3 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-mono font-bold text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category Selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={item.category}
+                        onChange={(e) => handleItemCategoryChange(idx, e.target.value as any)}
+                        className="w-full h-11 px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-medium text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                      >
+                        <option value="Food">Food / Canteen</option>
+                        <option value="Snacks">Snacks & Drinks</option>
+                        <option value="Stationery">Stationery</option>
+                        <option value="Personal care">Personal Care</option>
+                        <option value="Academic supplies">Academic Supplies</option>
+                      </select>
                     </div>
                   </div>
 
+                  {/* Notes / Variant */}
                   <div>
-                    <label className="block text-xs text-neutral-secondary mb-1">
-                      Notes or Brand Preference (Optional)
+                    <label className="block text-[11px] font-semibold text-neutral-secondary mb-1">
+                      Brand / Flavor or Sizing Note (Optional)
                     </label>
                     <input
                       type="text"
                       value={item.notes}
-                      onChange={(e) => handleItemChange(idx, 'notes', e.target.value)}
-                      className="w-full h-10 px-3 rounded-input bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs"
+                      onChange={(e) => handleItemNotesChange(idx, e.target.value)}
+                      placeholder="e.g. Chilled bottle, Classmate brand if available"
+                      className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-white focus:outline-none"
                     />
                   </div>
                 </div>
               ))}
 
+              {/* Add Item Button */}
+              {items.length < maxItemsAllowed && (
+                <button
+                  type="button"
+                  onClick={addItemRow}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-brand-indigo/30 hover:border-brand-indigo text-brand-indigo dark:text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Another Item ({items.length}/{maxItemsAllowed})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Estimated Subtotal */}
+            <div className="p-3.5 rounded-xl bg-neutral-surface-alt dark:bg-slate-800 flex items-center justify-between text-xs">
+              <span className="font-semibold text-neutral-secondary">
+                Estimated Items Total:
+              </span>
+              <span className="font-mono font-bold text-sm text-neutral-ink dark:text-white">
+                ₹{calculatedItemsTotal}
+              </span>
+            </div>
+
+            {/* Stepper Next Button */}
+            <div className="pt-4 flex justify-end border-t border-neutral-border dark:border-slate-800">
               <button
                 type="button"
-                onClick={addItemRow}
-                className="w-full h-10 rounded-input border-2 border-dashed border-brand-indigo/30 hover:border-brand-indigo text-brand-indigo dark:text-brand-indigo-darkmode text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                disabled={isFirstItemEmpty || !!prohibitedError || isValueExceeded}
+                onClick={() => setCurrentStep(2)}
+                className={`h-11 px-6 rounded-btn text-xs font-bold text-white flex items-center gap-2 transition-all ${
+                  isFirstItemEmpty || !!prohibitedError || isValueExceeded
+                    ? 'bg-neutral-300 dark:bg-slate-700 text-neutral-500 cursor-not-allowed'
+                    : 'bg-brand-indigo hover:bg-brand-indigo-dark shadow-sm active:scale-95'
+                }`}
               >
-                <Plus className="w-4 h-4" />
-                <span>Add Another Item</span>
+                <span>Continue to Pickup & Timing</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: Category */}
+        {/* ======================================================== */}
+        {/* STEP 2: PROFILE PICKUP DEFAULTS & TIMING PRESETS         */}
+        {/* ======================================================== */}
         {currentStep === 2 && (
-          <div className="space-y-4">
+          <div className="space-y-6 animate-fadeIn">
             <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                Pick Main Category
+              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-brand-indigo" />
+                <span>Pickup Location & Delivery Timing</span>
               </h2>
-              <p className="text-xs text-neutral-secondary">
-                Helps helpers browsing the campus feed group their shopping stops.
+              <p className="text-xs text-neutral-secondary mt-1">
+                Deliveries take place at official public campus locations. Defaulted to your profile pickup spot.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {categories.map((cat) => (
+            {/* Timing Presets: ASAP / Tonight / Tomorrow evening */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider block">
+                Needed-By Timeframe (Select Preset) *
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
-                  key={cat}
                   type="button"
-                  onClick={() => setCategory(cat)}
-                  className={`p-4 rounded-card border text-left transition-all ${
-                    category === cat
-                      ? 'border-brand-indigo bg-brand-indigo-light/30 dark:bg-brand-indigo/15 text-brand-indigo dark:text-brand-indigo-darkmode font-bold shadow-sm'
-                      : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                  onClick={() => setTimePreset('ASAP')}
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                    timePreset === 'ASAP'
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/30'
+                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
                   }`}
                 >
-                  <span className="text-sm block">{cat}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-600" />
+                      ASAP
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                      Rush
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
+                    Within 45 mins. Prioritized in feed for immediate shopping.
+                  </p>
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* STEP 3: Time & Urgent Flag */}
-        {currentStep === 3 && (
-          <div className="space-y-5">
-            <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                When is this needed by?
-              </h2>
-              <p className="text-xs text-neutral-secondary">
-                Helpers take orders that match their current walking route.
-              </p>
+                <button
+                  type="button"
+                  onClick={() => setTimePreset('Tonight')}
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                    timePreset === 'Tonight'
+                      ? 'bg-indigo-50 dark:bg-indigo-950/40 border-brand-indigo text-brand-indigo dark:text-indigo-200 ring-2 ring-brand-indigo/30'
+                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-brand-indigo" />
+                      Tonight
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                      Pre-Curfew
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
+                    Delivered tonight before 9:00 PM hostel check-in.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTimePreset('Tomorrow evening')}
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                    timePreset === 'Tomorrow evening'
+                      ? 'bg-teal-50 dark:bg-teal-950/40 border-brand-teal text-brand-teal dark:text-teal-200 ring-2 ring-brand-teal/30'
+                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-brand-teal" />
+                      Tomorrow evening
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                      Next Day
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
+                    Tomorrow before 8:00 PM. Perfect for planned study supplies.
+                  </p>
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                Needed-By Time Window *
+            {/* Profile-Based Pickup Point Selection */}
+            <div className="space-y-3 pt-4 border-t border-neutral-border dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider block">
+                    Campus Pickup Spot (13 Official Spots) *
+                  </label>
+                  <span className="text-[11px] text-neutral-secondary">
+                    Defaulted to your profile setting. Click below to switch if needed.
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-brand-indigo font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60">
+                  {pickupPoint}
+                </span>
+              </div>
+
+              {/* Search Filter for Pickup Locations */}
+              <input
+                type="text"
+                value={searchLocation}
+                onChange={(e) => setSearchLocation(e.target.value)}
+                placeholder="Search campus spot (e.g. Canopy, Library, Ananda Vihar)..."
+                className="w-full h-10 px-3.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+              />
+
+              {/* 13 Official Locations Selection Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-52 overflow-y-auto p-1">
+                {filteredPickupLocations.map((p) => {
+                  const isSelected = pickupPoint === p.name;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPickupPoint(p.name)}
+                      className={`p-3 rounded-xl border text-left text-xs font-semibold transition-all flex items-start gap-2.5 ${
+                        isSelected
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 border-brand-indigo text-brand-indigo dark:text-indigo-300 ring-2 ring-brand-indigo/30'
+                          : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                      }`}
+                    >
+                      <MapPin
+                        className={`w-4 h-4 shrink-0 mt-0.5 ${
+                          isSelected ? 'text-brand-indigo' : 'text-neutral-secondary'
+                        }`}
+                      />
+                      <span className="leading-tight">{p.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Preferred Store Selection */}
+            <div className="pt-4 border-t border-neutral-border dark:border-slate-800">
+              <label className="block text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider mb-2">
+                Preferred Store / Canteen (Optional)
               </label>
               <select
-                value={neededByTime}
-                onChange={(e) => setNeededByTime(e.target.value)}
-                className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                value={preferredStore}
+                onChange={(e) => setPreferredStore(e.target.value)}
+                className="w-full h-11 px-3 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
               >
-                <option>Within 45 mins (Urgent)</option>
-                <option>Today, 7:00 PM – 8:00 PM</option>
-                <option>Today, 9:00 PM – 10:00 PM (Late night)</option>
-                <option>Tomorrow Morning (Before 10:00 AM)</option>
+                <option value="Canopy Canteen & Refreshments">Canopy Canteen & Refreshments</option>
+                <option value="Central Library Stationery & Reprographics">Central Library Stationery & Reprographics</option>
+                <option value="KC Food Court & Juices">KC Food Court & Juices</option>
+                <option value="Campus Health Centre & Essentials">Campus Health Centre & Essentials</option>
+                <option value="Any Nearby Campus Stall">Any Nearby Campus Stall</option>
               </select>
             </div>
 
-            {/* Urgent Flag Toggle per Section 3.6 & 5.2 */}
-            <div className="p-4 rounded-card bg-semantic-danger-tint/30 dark:bg-semantic-danger/10 border border-semantic-danger/20 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-semantic-danger text-white flex items-center justify-center shrink-0">
-                  <Zap className="w-4 h-4" />
+            {/* Stepper Navigation */}
+            <div className="pt-4 flex items-center justify-between border-t border-neutral-border dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Items</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className="h-11 px-6 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-transform active:scale-95"
+              >
+                <span>Continue to Review</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* STEP 3: FINAL REVIEW & ONE CONFIRMATION ACTION           */}
+        {/* ======================================================== */}
+        {currentStep === 3 && (
+          <div className="space-y-6 animate-fadeIn">
+            <div>
+              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <span>Review Your Errand Request</span>
+              </h2>
+              <p className="text-xs text-neutral-secondary mt-1">
+                Confirm your request details below. Once posted, it will be visible to nearby campus helpers.
+              </p>
+            </div>
+
+            {/* Errand Summary Card */}
+            <div className="p-5 rounded-2xl bg-neutral-surface-alt/70 dark:bg-slate-800/70 border border-neutral-border dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-neutral-border dark:border-slate-700">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-secondary">
+                  Order Summary
+                </span>
+                <span className="text-xs font-semibold text-brand-indigo font-mono">
+                  {items.filter((it) => it.name.trim()).length} Item(s)
+                </span>
+              </div>
+
+              {/* Items Breakdown */}
+              <div className="space-y-2.5">
+                {items
+                  .filter((it) => it.name.trim())
+                  .map((it, idx) => (
+                    <div
+                      key={it.id || idx}
+                      className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-neutral-border/60 dark:border-slate-700/60 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-neutral-ink dark:text-white block">
+                          {it.quantity}x {it.name}
+                        </span>
+                        {it.notes && (
+                          <span className="text-[11px] text-neutral-secondary block italic">
+                            Note: {it.notes}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-neutral-placeholder font-mono">
+                          Category: {it.category}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-neutral-ink dark:text-white text-sm shrink-0">
+                        ₹{it.expectedPrice * it.quantity}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Logistics Details */}
+              <div className="pt-3 border-t border-neutral-border dark:border-slate-700 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-secondary flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-brand-indigo" />
+                    Pickup Meeting Spot:
+                  </span>
+                  <span className="font-bold text-neutral-ink dark:text-white text-right">
+                    {pickupPoint}
+                  </span>
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-secondary flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    Target Timeframe:
+                  </span>
+                  <span className="font-bold text-neutral-ink dark:text-white text-right">
+                    {getPresetLabel(timePreset)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-secondary flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-teal-600" />
+                    Preferred Store:
+                  </span>
+                  <span className="font-semibold text-neutral-ink dark:text-white text-right">
+                    {preferredStore}
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Estimated Cost Bar - No invented fee data */}
+              <div className="pt-3 border-t border-neutral-border dark:border-slate-700 flex items-center justify-between font-mono">
                 <div>
-                  <span className="font-bold text-xs text-semantic-danger dark:text-semantic-danger-dark block">
-                    Mark as Urgent Request
+                  <span className="text-xs text-neutral-secondary block font-sans">
+                    Estimated Items Total:
                   </span>
-                  <span className="text-[11px] text-neutral-secondary">
-                    Flags red on feed. Slightly higher suggested fee (+₹15).
+                  <span className="text-[11px] text-neutral-placeholder font-sans">
+                    (Paid direct to cashier via UPI QR)
                   </span>
                 </div>
+                <span className="font-heading font-extrabold text-2xl text-brand-indigo">
+                  ₹{calculatedItemsTotal}
+                </span>
               </div>
-
-              <input
-                type="checkbox"
-                checked={isUrgent}
-                onChange={(e) => setIsUrgent(e.target.checked)}
-                className="w-5 h-5 rounded text-semantic-danger focus:ring-semantic-danger"
-              />
             </div>
-          </div>
-        )}
 
-        {/* STEP 4: Preferences */}
-        {currentStep === 4 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                Substitution & Budget Preferences
-              </h2>
-              <p className="text-xs text-neutral-secondary">
-                Guide your helper if the exact brand or size is out of stock.
+            {/* Transparent Protocol Notice (No invented fees) */}
+            <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-800/30 text-xs space-y-2">
+              <div className="flex items-center gap-1.5 font-bold text-brand-indigo">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Zero Platform Fee • Direct Student Handover</span>
+              </div>
+              <p className="text-[11px] text-neutral-secondary dark:text-slate-400 leading-relaxed">
+                Helper fee (₹20–₹50) is set and paid directly to your helper via UPI once actual item prices and shelf photo evidence are approved in chat. The platform takes zero cut.
               </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                Are alternatives allowed?
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAlternativesAllowed(true)}
-                  className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                    alternativesAllowed
-                      ? 'bg-brand-indigo text-white border-brand-indigo'
-                      : 'border-neutral-border text-neutral-secondary'
-                  }`}
-                >
-                  Yes, with photo approval
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAlternativesAllowed(false)}
-                  className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                    !alternativesAllowed
-                      ? 'bg-brand-indigo text-white border-brand-indigo'
-                      : 'border-neutral-border text-neutral-secondary'
-                  }`}
-                >
-                  No, exact items only
-                </button>
-              </div>
-            </div>
+            {/* Stepper Navigation with ONE Final Confirmation Action */}
+            <div className="pt-4 flex items-center justify-between border-t border-neutral-border dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Timing</span>
+              </button>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                Maximum Budget Limit (₹)
-              </label>
-              <input
-                type="number"
-                value={budgetLimit}
-                onChange={(e) => setBudgetLimit(e.target.value)}
-                className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-              />
-              <span className="text-[11px] text-neutral-secondary mt-1 block">
-                Helper will not proceed if total exceeds this amount without prior approval.
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs text-neutral-secondary mb-1">
-                Brand / Size Specific Notes
-              </label>
-              <textarea
-                rows={2}
-                value={brandNotes}
-                onChange={(e) => setBrandNotes(e.target.value)}
-                className="w-full p-2.5 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs"
-              />
+              {/* Single Confirmation Action */}
+              <button
+                type="button"
+                onClick={handleSubmitOrder}
+                className="h-12 px-7 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
+              >
+                <span>Confirm & Post Errand →</span>
+              </button>
             </div>
           </div>
         )}
 
-        {/* STEP 5: Pickup Point */}
-        {currentStep === 5 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                Select Approved Campus Pickup Point
-              </h2>
-              <p className="text-xs text-neutral-secondary">
-                Deliveries must take place at public campus common spaces.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {campusPickupPoints.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPickupPoint(p.name)}
-                  className={`w-full p-3.5 rounded-card border text-left flex items-center gap-3 transition-colors ${
-                    pickupPoint === p.name
-                      ? 'border-brand-indigo bg-brand-indigo-light/30 dark:bg-brand-indigo/15 text-brand-indigo dark:text-brand-indigo-darkmode font-semibold'
-                      : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
-                  }`}
-                >
-                  <MapPin className="w-4 h-4 shrink-0 text-brand-indigo" />
-                  <span className="text-sm font-medium">{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* STEP 6: Review & Suggested Fee */}
-        {currentStep === 6 && (
-          <div className="space-y-5">
-            <div>
-              <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text">
-                Review & Confirm Request
-              </h2>
-              <p className="text-xs text-neutral-secondary">
-                Only verified student helpers will see this request after posting.
-              </p>
-            </div>
-
-            {/* Summary Box */}
-            <div className="p-4 rounded-card bg-neutral-surface-alt dark:bg-slate-800/60 border border-neutral-border dark:border-slate-700 space-y-3 text-xs">
-              <div className="flex justify-between items-start pb-2 border-b border-neutral-border dark:border-slate-700">
-                <div>
-                  <span className="font-bold text-sm text-neutral-ink dark:text-neutral-dark-text block">
-                    {items.map((it) => `${it.quantity}x ${it.name || 'Unnamed item'}`).join(', ')}
-                  </span>
-                  <span className="text-neutral-secondary">
-                    Category: {category} • Size: <strong className="font-mono">{sizeTag}</strong>
-                  </span>
-                </div>
-                <span className="text-brand-indigo dark:text-brand-indigo-darkmode font-bold">
-                  {isUrgent ? '⚡ Urgent' : 'Standard'}
-                </span>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between text-neutral-secondary">
-                  <span>Pickup Location:</span>
-                  <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text">{pickupPoint}</span>
-                </div>
-                <div className="flex justify-between text-neutral-secondary">
-                  <span>Needed By:</span>
-                  <span className="font-semibold text-neutral-ink dark:text-neutral-dark-text">{neededByTime}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Suggested Helper Fee Box (Section 6.2 Pilot range ₹20 - ₹50) */}
-            <div className="p-4 rounded-card bg-brand-teal-light/40 dark:bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-brand-teal uppercase tracking-wider block">
-                  Suggested Helper Fee
-                </span>
-                <span className="text-xs text-neutral-secondary">
-                  Pilot suggested rate (base + distance + size {sizeTag})
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="font-heading font-extrabold text-2xl font-mono text-brand-teal block">
-                  ₹{suggestedFee}
-                </span>
-                <span className="text-[10px] text-neutral-placeholder">Paid upon handover</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-input bg-brand-indigo-light/40 dark:bg-brand-indigo/10 border border-brand-indigo/20 text-xs text-brand-indigo flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>
-                <strong>Zero risk guarantee:</strong> You pay ₹0 if the item cannot be found or if you cancel before purchase.
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Stepper Navigation Buttons */}
-        <div className="pt-4 border-t border-neutral-border dark:border-slate-800 flex justify-between items-center">
-          {currentStep > 1 ? (
-            <button
-              type="button"
-              onClick={() => setCurrentStep(currentStep - 1)}
-              className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt flex items-center gap-1.5"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
-          ) : (
-            <div />
-          )}
-
-          {currentStep < 6 ? (
-            <button
-              type="button"
-              disabled={currentStep === 1 && (items[0].name.trim() === '' || !!prohibitedError)}
-              onClick={() => setCurrentStep(currentStep + 1)}
-              className={`h-11 px-6 rounded-btn text-xs font-semibold text-white flex items-center gap-1.5 transition-colors ${
-                currentStep === 1 && (items[0].name.trim() === '' || !!prohibitedError)
-                  ? 'bg-neutral-border text-neutral-disabled cursor-not-allowed'
-                  : 'bg-brand-indigo hover:bg-brand-indigo-dark'
-              }`}
-            >
-              <span>Continue</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmitOrder}
-              className="h-12 px-7 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-sm shadow-md transition-transform active:scale-95"
-            >
-              Post Request to Helpers →
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );

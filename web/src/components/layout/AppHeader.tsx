@@ -59,12 +59,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* Center: Interface Status / Super Admin Switcher */}
         {isSuperAdmin ? (
-          <div className="flex items-center gap-1.5">
-            <div className="bg-neutral-surface-alt dark:bg-slate-800 p-1 rounded-full flex items-center border border-amber-300 dark:border-amber-700/60 shadow-inner">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <div className="bg-neutral-surface-alt dark:bg-slate-800 p-0.5 sm:p-1 rounded-full flex items-center border border-amber-300 dark:border-amber-700/60 shadow-inner">
               <button
                 type="button"
                 onClick={() => onRoleChange('customer')}
-                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full transition-all ${
+                className={`flex items-center gap-1 px-1.5 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold rounded-full transition-all ${
                   role === 'customer'
                     ? 'bg-brand-indigo text-white shadow-sm'
                     : 'text-neutral-secondary dark:text-neutral-dark-secondary hover:text-neutral-ink'
@@ -75,7 +75,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onRoleChange('helper')}
-                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full transition-all ${
+                className={`flex items-center gap-1 px-1.5 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold rounded-full transition-all ${
                   role === 'helper'
                     ? 'bg-brand-teal text-white shadow-sm'
                     : 'text-neutral-secondary dark:text-neutral-dark-secondary hover:text-neutral-ink'
@@ -86,7 +86,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <button
                 type="button"
                 onClick={() => onRoleChange('club')}
-                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full transition-all ${
+                className={`flex items-center gap-1 px-1.5 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold rounded-full transition-all ${
                   role === 'club'
                     ? 'bg-purple-600 text-white shadow-sm'
                     : 'text-neutral-secondary dark:text-neutral-dark-secondary hover:text-neutral-ink'
@@ -98,9 +98,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
               Dev Mode
             </span>
+            <button
+              type="button"
+              onClick={() => onNavigate('/dev-admin')}
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 hover:bg-indigo-900 transition-colors shadow-sm"
+              title="Open Developer Control Room (/dev-admin)"
+            >
+              <span>⚙️ Control Room</span>
+            </button>
           </div>
         ) : (
-          <div className="px-3 sm:px-4 py-1.5 rounded-full bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text flex items-center gap-1.5 shadow-sm">
+          <div className="hidden sm:flex px-3 sm:px-4 py-1.5 rounded-full bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text items-center gap-1.5 shadow-sm">
             <Lock className="w-3.5 h-3.5 text-neutral-secondary" />
             <span>
               {role === 'helper'

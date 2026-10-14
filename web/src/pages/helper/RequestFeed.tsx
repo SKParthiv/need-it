@@ -12,6 +12,7 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { StatusChip } from '../../components/common/StatusChip';
+import { CampusClockWidget } from '../../components/common/CampusClockWidget';
 import { useWebApp } from '../../context/WebAppContext';
 
 interface RequestFeedProps {
@@ -30,8 +31,8 @@ export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
     const newOrd = addOrder({
       customerName: 'Karthik R.',
       customerAlias: 'Student #5120',
-      customerHostel: 'Hostel Block C',
-      pickupPoint: 'Hostel Block C Lobby',
+      customerHostel: 'Sandipani (BH)',
+      pickupPoint: 'Ananda Vihar (Boys’ Hostel)',
       category: 'Food',
       items: [
         {
@@ -51,7 +52,7 @@ export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
       isWaitingLong: false,
       status: 'open',
       sizeTag: 'S',
-      suggestedStore: 'KC Canteen'
+      suggestedStore: 'Canopy Canteen & Refreshments'
     });
     setNewestOrderId(newOrd.id);
   };
@@ -71,6 +72,9 @@ export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
 
   return (
     <div className="w-full max-w-content mx-auto px-4 sm:px-6 py-8 space-y-6">
+      {/* Campus Countdown Clock Banner (Controlled via Dev Admin) */}
+      <CampusClockWidget currentRole="helper" />
+
       {/* Header with Availability Shortcut */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

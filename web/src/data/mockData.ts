@@ -1,19 +1,41 @@
 import { Order, Shop, AppNotification, ClubReport, CampusUser, AvailabilityWindow, ChatConversation } from '../types';
 
 export const campusPickupPoints = [
-  { id: 'p1', name: 'ASK Building / Fountain Area', area: 'ASK Building / Fountain Area', isPublic: true },
-  { id: 'p2', name: 'Main Entrance / University Gate', area: 'Main Entrance / University Gate', isPublic: true },
-  { id: 'p3', name: 'VKG', area: 'VKG', isPublic: true },
-  { id: 'p4', name: 'KRC', area: 'KRC', isPublic: true },
-  { id: 'p5', name: 'School of Law', area: 'School of Law', isPublic: true },
-  { id: 'p6', name: 'Department Blocks', area: 'Department Blocks', isPublic: true },
-  { id: 'p7', name: 'Boys’ Hostel Area', area: 'Boys’ Hostel Area', isPublic: true },
-  { id: 'p8', name: 'Girls’ Hostel Area', area: 'Girls’ Hostel Area', isPublic: true },
-  { id: 'p9', name: 'KC Canteen', area: 'KC Canteen', isPublic: true },
-  { id: 'p10', name: 'Sports Ground', area: 'Sports Ground', isPublic: true },
-  { id: 'p11', name: 'Basketball Court', area: 'Basketball Court', isPublic: true },
-  { id: 'p12', name: 'Indoor Sports Facilities', area: 'Indoor Sports Facilities', isPublic: true },
-  { id: 'p13', name: 'JVC Auditorium', area: 'JVC Auditorium', isPublic: true }
+  { id: 'p1', name: 'Canopy Canteen', area: 'Canopy Canteen', isPublic: true },
+  { id: 'p2', name: 'Canopy Lawn', area: 'Canopy Lawn', isPublic: true },
+  { id: 'p3', name: 'Library Circle', area: 'Library Circle', isPublic: true },
+  { id: 'p4', name: 'Ananda Vihar (Boys’ Hostel)', area: 'Ananda Vihar (Boys’ Hostel)', isPublic: true },
+  { id: 'p5', name: 'Vaidehi / VK (Girls’ Hostel)', area: 'Vaidehi / VK (Girls’ Hostel)', isPublic: true },
+  { id: 'p6', name: 'Vihar Gate', area: 'Vihar Gate', isPublic: true },
+  { id: 'p7', name: 'Main Gate Security', area: 'Main Gate Security', isPublic: true },
+  { id: 'p8', name: 'Chanakya / CCC', area: 'Chanakya / CCC', isPublic: true },
+  { id: 'p9', name: 'Pharmacy Gate', area: 'Pharmacy Gate', isPublic: true },
+  { id: 'p10', name: 'JVC Canteen', area: 'JVC Canteen', isPublic: true },
+  { id: 'p11', name: 'Meera Mess Circle', area: 'Meera Mess Circle', isPublic: true },
+  { id: 'p12', name: 'Rajalakshmi Circle', area: 'Rajalakshmi Circle', isPublic: true },
+  { id: 'p13', name: 'Krishna Circle', area: 'Krishna Circle', isPublic: true },
+];
+
+export const sastraHostels = [
+  // Boys' Hostels
+  'Ananda Vihar (BH)',
+  'Vashistha (BH)',
+  'Vishwakarma (BH)',
+  'Sandipani (BH)',
+  'Kanva (BH)',
+  'Bharadwaja (BH)',
+  'Agasthya (BH)',
+  'Parasara (BH)',
+  // Girls' Hostels
+  'Vaidehi / VK (GH)',
+  'Vikasini (GH)',
+  'Anusuya (GH)',
+  'Arundhati (GH)',
+  // Day Scholars
+  'Day Scholar (Thanjavur)',
+  'Day Scholar (Trichy)',
+  'Day Scholar (Kumbakonam)',
+  'Day Scholar (Other)',
 ];
 
 export const prohibitedItemsList = [
@@ -31,26 +53,26 @@ export const mockOrders: Order[] = [];
 export const mockShops: Shop[] = [
   {
     id: 'shp-1',
-    name: 'Campus Mart',
-    location: 'Near North Gate, Opp. Bank ATM',
-    distance: '350m from Main Gate',
+    name: 'Canopy Canteen & Refreshments',
+    location: 'Canopy Square, Central Campus',
+    distance: '100m from Central Lawn',
     rating: 4.8,
-    reviewCount: 42,
-    categories: ['Snacks', 'Personal care', 'Beverages'],
+    reviewCount: 94,
+    categories: ['Snacks', 'Beverages', 'Food'],
     popularItems: [
-      { name: 'Biscuits & Cookies', estimatedPrice: 30 },
-      { name: 'Instant Noodles (4-pack)', estimatedPrice: 56 },
-      { name: 'Toothpaste & Brush', estimatedPrice: 75 }
+      { name: 'Veg Puff & Tea', estimatedPrice: 30 },
+      { name: 'Cold Coffee', estimatedPrice: 40 },
+      { name: 'Samosa (2 pcs)', estimatedPrice: 25 }
     ],
     verifiedByClub: true
   },
   {
     id: 'shp-2',
-    name: 'Bits & Bytes Stationery & Xerox',
-    location: 'Student Complex, Shop 4',
-    distance: '150m from Central Library',
-    rating: 4.6,
-    reviewCount: 68,
+    name: 'Central Library Stationery & Reprographics',
+    location: 'Ground Floor, Central Library Complex',
+    distance: '50m from Library Circle',
+    rating: 4.7,
+    reviewCount: 112,
     categories: ['Stationery', 'Academic supplies', 'Printing'],
     popularItems: [
       { name: 'A4 Spiral Notebook', estimatedPrice: 60 },
@@ -61,26 +83,26 @@ export const mockShops: Shop[] = [
   },
   {
     id: 'shp-3',
-    name: 'Annapoorna Fresh & Dairy',
-    location: 'West Avenue Market, Stall 12',
-    distance: '600m from Hostel Block C',
-    rating: 4.9,
-    reviewCount: 31,
-    categories: ['Food', 'Dairy', 'Fruit'],
+    name: 'KC Food Court & Juices',
+    location: 'Near KRC Block & Sports Complex',
+    distance: '300m from Ananda Vihar',
+    rating: 4.6,
+    reviewCount: 58,
+    categories: ['Food', 'Beverages', 'Snacks'],
     popularItems: [
-      { name: 'Fresh Milk Pouch (500ml)', estimatedPrice: 32 },
-      { name: 'Bananas (6 pcs)', estimatedPrice: 40 },
-      { name: 'Brown Bread Loaf', estimatedPrice: 45 }
+      { name: 'Fresh Fruit Juice', estimatedPrice: 45 },
+      { name: 'Veg Sandwich', estimatedPrice: 50 },
+      { name: 'Biscuits & Cookies', estimatedPrice: 30 }
     ],
     verifiedByClub: true
   },
   {
     id: 'shp-4',
-    name: 'Green Pharmacy & Daily Essentials',
-    location: 'Gate 1 Commercial Arcade',
-    distance: '200m from Security Pavilion',
-    rating: 4.7,
-    reviewCount: 25,
+    name: 'Campus Health Centre & Essentials',
+    location: 'Adjacent to Main Gate Security',
+    distance: '100m from Main Gate',
+    rating: 4.9,
+    reviewCount: 46,
     categories: ['Personal care', 'First Aid'],
     popularItems: [
       { name: 'Band-Aid Fabric Strips', estimatedPrice: 30 },

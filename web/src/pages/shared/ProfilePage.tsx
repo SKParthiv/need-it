@@ -12,7 +12,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { VerifiedBadge } from '../../components/common/VerifiedBadge';
-import { campusPickupPoints } from '../../data/mockData';
+import { campusPickupPoints, sastraHostels } from '../../data/mockData';
 import { UserRole } from '../../types';
 import { useWebApp, SUPER_ADMIN_EMAIL } from '../../context/WebAppContext';
 
@@ -177,12 +177,20 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
               Hostel / Day Scholar Details
             </label>
-            <input
-              type="text"
+            <select
               value={hostel}
               onChange={(e) => setHostel(e.target.value)}
               className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-            />
+            >
+              {!sastraHostels.includes(hostel) && hostel && (
+                <option value={hostel}>{hostel}</option>
+              )}
+              {sastraHostels.map((h) => (
+                <option key={h} value={h}>
+                  {h}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -192,8 +200,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             <select
               value={pickupPoint}
               onChange={(e) => setPickupPoint(e.target.value)}
-              className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm"
+              className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
             >
+              {!campusPickupPoints.some((p) => p.name === pickupPoint) && pickupPoint && (
+                <option value={pickupPoint}>{pickupPoint}</option>
+              )}
               {campusPickupPoints.map((p) => (
                 <option key={p.id} value={p.name}>
                   {p.name}

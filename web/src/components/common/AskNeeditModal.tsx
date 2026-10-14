@@ -166,15 +166,20 @@ export const AskNeeditModal: React.FC<AskNeeditModalProps> = ({
         )
       );
     } catch (err: any) {
-      if (controller.signal.aborted) {
-        // Clean cancellation: preserve partial text if received, or remove empty placeholder
-        setMessages((prev) =>
-          prev
-            .map((msg) =>
-              msg.id === assistantMsgId ? { ...msg, isStreaming: false } : msg
-            )
-            .filter((msg) => msg.id !== assistantMsgId || msg.text.trim().length > 0)
-        );
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        // Clean cancellation: preserve partial text if received, or remove empty placeholder & orphan user message
+        setMessages((prev) => {
+          const assistantMsg = prev.find((m) => m.id === assistantMsgId);
+          const hasAssistantText = (assistantMsg?.text || '').trim().length > 0;
+          if (!hasAssistantText) {
+            // Remove both the empty assistant placeholder AND the user message that had no response
+            return prev.filter((m) => m.id !== assistantMsgId && m.id !== userMsg.id);
+          }
+          // If partial text was received, keep it with isStreaming: false
+          return prev.map((msg) =>
+            msg.id === assistantMsgId ? { ...msg, isStreaming: false } : msg
+          );
+        });
         return;
       }
 

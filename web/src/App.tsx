@@ -54,6 +54,10 @@ import { ClubConsole } from './pages/club/ClubConsole';
 // Special Screens
 import { SpecialScreens } from './pages/special/SpecialScreens';
 
+// Dev Admin Control Room
+import { DevAdminProvider } from './context/DevAdminContext';
+import { DevAdminLayout } from './pages/devAdmin/DevAdminLayout';
+
 const AppContent: React.FC = () => {
   const { role, setRole, loginAsRole, currentUser, isSuperAdmin } = useWebApp();
   const [currentPath, setCurrentPath] = useState<string>(
@@ -125,6 +129,19 @@ const AppContent: React.FC = () => {
           .join('')
           .slice(0, 2)
           .toUpperCase() || 'AS';
+
+  const isDevAdminPage = currentPath.startsWith('/dev-admin');
+
+  if (isDevAdminPage) {
+    if (!isSuperAdmin) {
+      return (
+        <div className="min-h-screen bg-neutral-page-bg dark:bg-neutral-dark-page">
+          <SpecialScreens type="404" onNavigate={navigate} />
+        </div>
+      );
+    }
+    return <DevAdminLayout onNavigate={navigate} />;
+  }
 
   // Determine which page content to render
   const renderContent = () => {
@@ -346,7 +363,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <WebAppProvider>
-      <AppContent />
+      <DevAdminProvider>
+        <AppContent />
+      </DevAdminProvider>
     </WebAppProvider>
   );
 };

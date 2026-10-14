@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StatusChip } from '../../components/common/StatusChip';
+import { CampusClockWidget } from '../../components/common/CampusClockWidget';
 import { useWebApp } from '../../context/WebAppContext';
 import { Briefcase, Calendar, ChevronRight, Clock, MapPin } from 'lucide-react';
 
@@ -23,6 +24,9 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
 
   return (
     <div className="w-full max-w-content mx-auto px-4 sm:px-6 py-8 space-y-6">
+      {/* Campus Countdown Clock Banner (Controlled via Dev Admin) */}
+      <CampusClockWidget currentRole="helper" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

@@ -342,6 +342,14 @@ export async function streamCampusAiMessage(
       }
     }
 
+    // Check if operation was cancelled while reading the stream
+    if (callbacks.signal?.aborted) {
+      resetActiveChatSession();
+      const abortErr = new Error('Request was cancelled.');
+      abortErr.name = 'AbortError';
+      throw abortErr;
+    }
+
     if (!accumulatedText || accumulatedText.trim().length === 0) {
       // Check response promise in case stream was buffered
       const fullResponse = await result.response;
@@ -351,11 +359,15 @@ export async function streamCampusAiMessage(
       }
     }
 
+    if (callbacks.signal?.aborted) {
+      resetActiveChatSession();
+      const abortErr = new Error('Request was cancelled.');
+      abortErr.name = 'AbortError';
+      throw abortErr;
+    }
+
     if (!accumulatedText || accumulatedText.trim().length === 0) {
       resetActiveChatSession();
-      if (callbacks.signal?.aborted) {
-        return '';
-      }
       throw new Error('Gemini returned an empty response. Please try rephrasing your question.');
     }
 
@@ -371,7 +383,9 @@ export async function streamCampusAiMessage(
 
     if (err?.name === 'AbortError' || callbacks.signal?.aborted) {
       console.info('[NeedIt Firebase AI] Request was cancelled.');
-      return '';
+      const abortErr = new Error('Request was cancelled.');
+      abortErr.name = 'AbortError';
+      throw abortErr;
     }
 
     console.error('[NeedIt Firebase AI] Gemini streaming failure:', err);

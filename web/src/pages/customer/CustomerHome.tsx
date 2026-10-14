@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { StatusChip } from '../../components/common/StatusChip';
 import { VerifiedBadge } from '../../components/common/VerifiedBadge';
+import { CampusClockWidget } from '../../components/common/CampusClockWidget';
 import { useWebApp } from '../../context/WebAppContext';
 
 interface CustomerHomeProps {
@@ -41,6 +42,9 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
 
   return (
     <div className="w-full max-w-content mx-auto px-4 sm:px-6 py-6 space-y-6">
+      {/* Campus Activity Clock Widget (Controlled via Dev Admin) */}
+      <CampusClockWidget currentRole="customer" />
+
       {/* 1. Greeting & Hero Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 rounded-panel bg-gradient-to-r from-brand-indigo to-indigo-700 text-white shadow-e2">
         <div className="space-y-1">

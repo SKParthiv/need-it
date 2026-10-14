@@ -56,6 +56,18 @@ def seed():
             "is_staff": True,
             "is_superuser": True,
         },
+        {
+            "username": "130180058@sastra.ac.in",
+            "email": "130180058@sastra.ac.in",
+            "first_name": "Sri Thinesh",
+            "last_name": "K.",
+            "role": User.Role.CUSTOMER,
+            "hostel_block": "Hostel Block A, Room 312",
+            "pickup_point": "ASK Building / Fountain Area",
+            "password": "needit82111",
+            "is_staff": True,
+            "is_superuser": True,
+        },
     ]
 
     for acc in accounts:
