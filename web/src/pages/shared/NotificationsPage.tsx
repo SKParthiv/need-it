@@ -20,17 +20,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
         </p>
       </div>
 
-      {/* WhatsApp Broadcast Pilot Notice (Section 8 & 16) */}
-      <div className="p-4 rounded-card bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-start gap-3 shadow-sm">
-        <MessageCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <span className="font-bold block">Campus Pilot WhatsApp Broadcast Active</span>
-          <p>
-            During the campus pilot phase, urgent order updates and evening delivery windows are mirrored to the verified student WhatsApp broadcast channel.
-          </p>
-        </div>
-      </div>
-
       {/* Notifications List */}
       <div className="space-y-3">
         {notifications.length === 0 ? (

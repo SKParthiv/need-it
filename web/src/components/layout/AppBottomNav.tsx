@@ -40,7 +40,6 @@ export const AppBottomNav: React.FC<AppBottomNavProps> = ({
     { label: 'Home', path: '/app/home', icon: Home },
     { label: 'My Orders', shortLabel: 'Orders', path: '/app/orders', icon: Package },
     { label: 'Post', shortLabel: 'Post', path: '/app/post', icon: Plus, isRaised: true },
-    { label: 'Chat', path: '/app/chat', icon: MessageSquare },
     { label: 'Profile', path: '/app/profile', icon: User },
   ];
 
@@ -48,7 +47,6 @@ export const AppBottomNav: React.FC<AppBottomNavProps> = ({
     { label: 'Feed', path: '/app/helper/feed', icon: Compass },
     { label: 'My Jobs', shortLabel: 'Jobs', path: '/app/helper/jobs', icon: Briefcase },
     { label: 'Availability', shortLabel: 'Avail', path: '/app/helper/availability', icon: Calendar },
-    { label: 'Chat', path: '/app/chat', icon: MessageSquare },
     { label: 'Profile', path: '/app/profile', icon: User },
   ];
 

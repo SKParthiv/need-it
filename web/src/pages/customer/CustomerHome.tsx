@@ -17,12 +17,10 @@ import { useWebApp } from '../../context/WebAppContext';
 
 interface CustomerHomeProps {
   onNavigate: (path: string) => void;
-  onOpenAskNeedit: () => void;
 }
 
 export const CustomerHome: React.FC<CustomerHomeProps> = ({
-  onNavigate,
-  onOpenAskNeedit
+  onNavigate
 }) => {
   const { orders, currentUser } = useWebApp();
 
@@ -190,30 +188,6 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({
           </button>
         </div>
       )}
-
-      {/* 4. "Ask NEEDIT" Shortcut Banner per spec 6.1 */}
-      <div className="p-4 rounded-card bg-brand-indigo-light/50 dark:bg-brand-indigo/15 border border-brand-indigo/20 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-indigo text-white flex items-center justify-center shadow-sm shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-heading font-semibold text-sm text-neutral-ink dark:text-neutral-dark-text">
-              Not sure where to find an item on campus?
-            </h3>
-            <p className="text-xs text-neutral-secondary dark:text-neutral-dark-secondary">
-              Ask our student helper database for store locations, stock availability, and prices.
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={onOpenAskNeedit}
-          className="h-9 px-4 rounded-btn bg-brand-indigo text-white text-xs font-semibold hover:bg-brand-indigo-dark transition-colors shrink-0"
-        >
-          Ask NEEDIT
-        </button>
-      </div>
 
       {/* 5. Recent Orders List */}
       <div className="space-y-3">

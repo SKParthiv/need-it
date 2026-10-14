@@ -2,12 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Logo } from '../../components/common/Logo';
 import {
   ShieldCheck,
-  Mail,
-  ArrowRight,
   AlertCircle,
-  CheckCircle2,
-  KeyRound,
-  UserCheck,
   Lock,
   Ban,
   ShoppingBag,
@@ -16,7 +11,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { UserRole } from '../../types';
-import { AUTHORIZED_ADMIN_EMAILS, useWebApp } from '../../context/WebAppContext';
+import { useWebApp } from '../../context/WebAppContext';
 
 // Real Google Workspace sign-in (GIS). Renders Google's own button; the
 // returned ID token goes to POST /api/auth/google/, which enforces the
@@ -64,37 +59,26 @@ const GoogleSignInButton: React.FC<{ onCredential: (idToken: string) => void }> 
 };
 
 interface AuthPagesProps {
-  mode: 'login' | 'register';
   initialRole?: UserRole;
   onNavigate: (path: string) => void;
 }
 
 export const AuthPages: React.FC<AuthPagesProps> = ({
-  mode: initialMode,
   initialRole = 'customer',
   onNavigate
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   // Pre-login question: Step 1 = select-role, Step 2 = credentials
   const [authStage, setAuthStage] = useState<'select-role' | 'credentials'>('select-role');
   const [role, setRole] = useState<UserRole>(initialRole);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { login, register, googleLogin } = useWebApp();
-
-  const sastraEmailRegex = /^[0-9a-zA-Z._%+-]+@sastra\.ac\.in$/i;
+  const { googleLogin } = useWebApp();
 
   const handleSelectRoleAndProceed = (selectedRole: UserRole) => {
     setRole(selectedRole);
     setAuthStage('credentials');
     setError(null);
-    setEmail('');
-    setPassword('');
   };
 
   const navigateForRole = (resolved: UserRole) => {
@@ -111,54 +95,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
       navigateForRole(resolved);
     } catch (err: any) {
       setError(err?.message || 'Google sign-in failed. Use your SASTRA Workspace account.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Real authentication: the backend verifies the password and issues the
-  // session token. Which portal you land in comes from the account's role
-  // on the server — never from what the client claims.
-  const handleCredentialsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    const trimmed = email.trim().toLowerCase();
-    if (!sastraEmailRegex.test(trimmed)) {
-      setError('Invalid email format. Format must strictly be: your_reg_no@sastra.ac.in');
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
-    if (role === 'club') {
-      const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.map((e2) => e2.toLowerCase()).includes(trimmed);
-      if (!isAuthorizedAdmin) {
-        setError('Access Restricted: the Admin Console is reserved for authorized campus administrators.');
-        return;
-      }
-    }
-    if (mode === 'register' && !firstName.trim()) {
-      setError('Please enter your name.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const resolved =
-        mode === 'login'
-          ? await login(trimmed, password)
-          : await register({
-              email: trimmed,
-              password,
-              role: role === 'helper' ? 'helper' : 'customer',
-              first_name: firstName.trim(),
-              last_name: lastName.trim(),
-            });
-      navigateForRole(resolved);
-    } catch (err: any) {
-      setError(err?.message || 'Sign-in failed. Check your email and password.');
     } finally {
       setSubmitting(false);
     }
@@ -184,9 +120,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
           <p className="text-xs sm:text-sm text-neutral-secondary dark:text-neutral-dark-secondary max-w-md mx-auto">
             {authStage === 'select-role'
               ? 'NEEDIT isolates student customers, peer delivery agents, and campus safety admins into dedicated interfaces.'
-              : mode === 'login'
-              ? 'Verify your official SASTRA credentials to access your designated interface.'
-              : 'Create your verified peer profile using your institutional university registration ID.'}
+              : 'Sign in with your SASTRA Google Workspace account. New here? Your account is created automatically on first sign-in.'}
           </p>
         </div>
 
@@ -304,38 +238,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
               </span>
             </div>
 
-            {/* Mode Toggle (Sign In / Register) */}
-            <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-surface-alt dark:bg-slate-800 rounded-lg border border-neutral-border dark:border-slate-700 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setError(null);
-                }}
-                className={`py-2 rounded-md transition-all ${
-                  mode === 'login'
-                    ? 'bg-white dark:bg-slate-700 text-neutral-ink dark:text-white shadow-sm'
-                    : 'text-neutral-secondary hover:text-neutral-ink'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setError(null);
-                }}
-                className={`py-2 rounded-md transition-all ${
-                  mode === 'register'
-                    ? 'bg-white dark:bg-slate-700 text-neutral-ink dark:text-white shadow-sm'
-                    : 'text-neutral-secondary hover:text-neutral-ink'
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-
             {/* Admin Restriction Banner */}
             {role === 'club' && (
               <div className="p-3 rounded-card bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40 text-xs text-purple-900 dark:text-purple-200 flex items-start gap-2">
@@ -349,98 +251,13 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
               </div>
             )}
 
-            {/* Google Workspace sign-in (primary path for students) */}
-            {role !== 'club' && (
-              <div className="space-y-2">
-                <GoogleSignInButton onCredential={handleGoogleCredential} />
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
-                  <span className="flex-shrink mx-3 text-[10px] text-neutral-placeholder uppercase font-medium">Or with email &amp; password</span>
-                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
-                </div>
-              </div>
-            )}
+            {/* Google Workspace sign-in — the only way in */}
+            <div className="space-y-4">
+              <GoogleSignInButton onCredential={handleGoogleCredential} />
 
-            {/* Credentials Form — real backend auth, no shortcuts */}
-            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
-              {mode === 'register' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={firstName}
-                      onChange={(e) => {
-                        setFirstName(e.target.value);
-                        setError(null);
-                      }}
-                      className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => {
-                        setLastName(e.target.value);
-                        setError(null);
-                      }}
-                      className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                    />
-                  </div>
-                </div>
+              {submitting && (
+                <p className="text-center text-xs text-neutral-secondary">Verifying with Google…</p>
               )}
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Official SASTRA Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setError(null);
-                    }}
-                    className="w-full h-11 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo font-mono"
-                  />
-                </div>
-                <p className="text-[11px] text-neutral-secondary mt-1">
-                  Format must strictly be:{' '}
-                  <span className="font-mono text-brand-indigo font-semibold">
-                    your_reg_no@sastra.ac.in
-                  </span>
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Password
-                </label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setError(null);
-                    }}
-                    className="w-full h-11 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                  />
-                </div>
-              </div>
 
               {/* Error Banner */}
               {error && (
@@ -450,27 +267,12 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark active:scale-[0.98] disabled:opacity-60 text-white font-medium text-sm transition-all duration-150 shadow-sm flex items-center justify-center gap-2"
-              >
-                <span>
-                  {submitting
-                    ? 'Signing in…'
-                    : mode === 'login'
-                    ? `Sign In to ${
-                        role === 'helper'
-                          ? 'Delivery Agent Feed'
-                          : role === 'club'
-                          ? 'Admin Console'
-                          : 'Customer Home'
-                      }`
-                    : 'Create Account & Sign In'}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
+              <p className="text-[11px] text-neutral-secondary text-center leading-relaxed">
+                Only <span className="font-mono font-semibold text-brand-indigo">@sastra.ac.in</span> Workspace
+                accounts are let in — the server checks the Google hosted-domain claim, not just the address.
+                First sign-in creates your account automatically.
+              </p>
+            </div>
           </div>
         )}
 
