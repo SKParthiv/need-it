@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Logo } from '../../components/common/Logo';
 import {
   ShieldCheck,
@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   KeyRound,
   UserCheck,
-  Sparkles,
   Lock,
   Ban,
   ShoppingBag,
@@ -17,109 +16,151 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { UserRole } from '../../types';
-import { SUPER_ADMIN_EMAIL, AUTHORIZED_ADMIN_EMAILS } from '../../context/WebAppContext';
+import { AUTHORIZED_ADMIN_EMAILS, useWebApp } from '../../context/WebAppContext';
+
+// Real Google Workspace sign-in (GIS). Renders Google's own button; the
+// returned ID token goes to POST /api/auth/google/, which enforces the
+// @sastra.ac.in hosted domain server-side. Renders nothing when the build
+// has no VITE_GOOGLE_CLIENT_ID (local dev without Google setup).
+const GoogleSignInButton: React.FC<{ onCredential: (idToken: string) => void }> = ({ onCredential }) => {
+  const divRef = useRef<HTMLDivElement>(null);
+  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || '';
+  const callbackRef = useRef(onCredential);
+  callbackRef.current = onCredential;
+
+  useEffect(() => {
+    if (!clientId || !divRef.current) return;
+    const init = () => {
+      const g = (window as any).google;
+      if (!g?.accounts?.id || !divRef.current) return;
+      g.accounts.id.initialize({
+        client_id: clientId,
+        callback: (resp: any) => {
+          if (resp?.credential) callbackRef.current(resp.credential);
+        },
+      });
+      divRef.current.innerHTML = '';
+      g.accounts.id.renderButton(divRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: 320,
+        text: 'continue_with',
+      });
+    };
+    if ((window as any).google?.accounts?.id) {
+      init();
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = init;
+    document.head.appendChild(s);
+  }, [clientId]);
+
+  if (!clientId) return null;
+  return <div ref={divRef} className="flex justify-center" />;
+};
 
 interface AuthPagesProps {
   mode: 'login' | 'register';
   initialRole?: UserRole;
   onNavigate: (path: string) => void;
-  onLoginSuccess: (role: UserRole, customEmail?: string) => void;
 }
 
 export const AuthPages: React.FC<AuthPagesProps> = ({
   mode: initialMode,
   initialRole = 'customer',
-  onNavigate,
-  onLoginSuccess
+  onNavigate
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   // Pre-login question: Step 1 = select-role, Step 2 = credentials
   const [authStage, setAuthStage] = useState<'select-role' | 'credentials'>('select-role');
   const [role, setRole] = useState<UserRole>(initialRole);
   const [email, setEmail] = useState('');
-  const [otpStep, setOtpStep] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { login, register, googleLogin } = useWebApp();
 
   const sastraEmailRegex = /^[0-9a-zA-Z._%+-]+@sastra\.ac\.in$/i;
 
   const handleSelectRoleAndProceed = (selectedRole: UserRole) => {
     setRole(selectedRole);
     setAuthStage('credentials');
-    setOtpStep(false);
     setError(null);
-    if (selectedRole === 'customer') {
-      setEmail('customer@sastra.ac.in');
-    } else if (selectedRole === 'helper') {
-      setEmail('helper@sastra.ac.in');
-    } else {
-      setEmail('admin@sastra.ac.in');
+    setEmail('');
+    setPassword('');
+  };
+
+  const navigateForRole = (resolved: UserRole) => {
+    if (resolved === 'helper') onNavigate('/app/helper/feed');
+    else if (resolved === 'club') onNavigate('/club');
+    else onNavigate('/app/home');
+  };
+
+  const handleGoogleCredential = async (idToken: string) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const resolved = await googleLogin(idToken, role === 'helper' ? 'helper' : 'customer');
+      navigateForRole(resolved);
+    } catch (err: any) {
+      setError(err?.message || 'Google sign-in failed. Use your SASTRA Workspace account.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  // Real authentication: the backend verifies the password and issues the
+  // session token. Which portal you land in comes from the account's role
+  // on the server — never from what the client claims.
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed) {
-      setError('Please enter your SASTRA email address.');
-      return;
-    }
-
     if (!sastraEmailRegex.test(trimmed)) {
       setError('Invalid email format. Format must strictly be: your_reg_no@sastra.ac.in');
       return;
     }
-
-    // Role-specific authorization check:
-    // Only the 3 authorized admin accounts can access the Admin console
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
     if (role === 'club') {
-      const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(trimmed);
+      const isAuthorizedAdmin = AUTHORIZED_ADMIN_EMAILS.map((e2) => e2.toLowerCase()).includes(trimmed);
       if (!isAuthorizedAdmin) {
-        setError(
-          'Access Restricted: Admin Console is strictly reserved for the 3 authorized campus administrators. For developer testing, use the lead developer account configured in VITE_ADMIN_EMAILS.'
-        );
+        setError('Access Restricted: the Admin Console is reserved for authorized campus administrators.');
         return;
       }
     }
-
-    // Proceed to OTP step
-    setOtpStep(true);
-  };
-
-  const handleOtpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (otpCode.trim().length !== 4) {
-      setError('Please enter the 4-digit verification code sent to your SASTRA email.');
+    if (mode === 'register' && !firstName.trim()) {
+      setError('Please enter your name.');
       return;
     }
 
-    const trimmedEmail = email.trim().toLowerCase();
-    onLoginSuccess(role, trimmedEmail);
-
-    if (role === 'helper') {
-      onNavigate('/app/helper/feed');
-    } else if (role === 'club') {
-      onNavigate('/club');
-    } else {
-      onNavigate('/app/home');
-    }
-  };
-
-  const handleQuickDemoLogin = (demoRole: UserRole, demoEmail: string) => {
-    setEmail(demoEmail);
-    setRole(demoRole);
-    setError(null);
-    onLoginSuccess(demoRole, demoEmail);
-    if (demoRole === 'helper') {
-      onNavigate('/app/helper/feed');
-    } else if (demoRole === 'club') {
-      onNavigate('/club');
-    } else {
-      onNavigate('/app/home');
+    setSubmitting(true);
+    try {
+      const resolved =
+        mode === 'login'
+          ? await login(trimmed, password)
+          : await register({
+              email: trimmed,
+              password,
+              role: role === 'helper' ? 'helper' : 'customer',
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+            });
+      navigateForRole(resolved);
+    } catch (err: any) {
+      setError(err?.message || 'Sign-in failed. Check your email and password.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -232,23 +273,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
               </button>
             </div>
 
-            {/* Quick Developer Super Admin Access */}
-            <div className="pt-2 p-3 rounded-card bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-semibold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" /> Developer Testing Override:
-                </span>
-                <span className="text-[10px] text-amber-700 dark:text-amber-400">All Interfaces Access</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('customer', SUPER_ADMIN_EMAIL)}
-                className="w-full py-2 px-3 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 hover:border-amber-500 text-left flex items-center justify-between text-xs font-semibold text-neutral-ink dark:text-white"
-              >
-                <span>{SUPER_ADMIN_EMAIL} (Sri Thinesh)</span>
-                <span className="text-[10px] text-amber-600 font-bold uppercase">Super Admin →</span>
-              </button>
-            </div>
           </div>
         ) : (
           /* STEP 2: CREDENTIALS & OTP AUTHENTICATION */
@@ -260,7 +284,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 onClick={() => {
                   setAuthStage('select-role');
                   setError(null);
-                  setOtpStep(false);
                 }}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-secondary hover:text-brand-indigo transition-colors"
               >
@@ -287,7 +310,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 type="button"
                 onClick={() => {
                   setMode('login');
-                  setOtpStep(false);
                   setError(null);
                 }}
                 className={`py-2 rounded-md transition-all ${
@@ -302,7 +324,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 type="button"
                 onClick={() => {
                   setMode('register');
-                  setOtpStep(false);
                   setError(null);
                 }}
                 className={`py-2 rounded-md transition-all ${
@@ -322,258 +343,134 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 <div className="space-y-0.5">
                   <div className="font-semibold">Campus Admin Whitelist Enforced</div>
                   <div className="text-[11px] text-purple-800 dark:text-purple-300">
-                    Only 3 authorized campus administrators can access this interface. Lead developer:{' '}
-                    <span className="font-mono font-bold">{SUPER_ADMIN_EMAIL || 'configured via VITE_ADMIN_EMAILS'}</span>.
+                    Only authorized campus administrators can access this interface.
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Quick Demo Sign In Cards for Current Role */}
-            <div className="space-y-2 p-3 rounded-card bg-neutral-surface-alt/60 dark:bg-slate-800/40 border border-neutral-border dark:border-slate-700">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-secondary">
-                <span className="flex items-center gap-1 text-brand-indigo dark:text-brand-indigo-darkmode">
-                  <Sparkles className="w-3.5 h-3.5" /> 1-Tap Quick Sign In:
-                </span>
-                <span className="text-[10px] text-neutral-secondary font-mono">Verified ID</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                {/* Developer Super Admin (Accesses all interfaces) */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin(role, SUPER_ADMIN_EMAIL)}
-                  className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 hover:border-amber-500 text-left transition-all hover:shadow-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
-                      ST
-                    </div>
-                    <div className="overflow-hidden">
-                      <div className="font-semibold text-xs text-neutral-ink dark:text-neutral-dark-text truncate">
-                        Sri Thinesh
-                      </div>
-                      <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                        Super Admin (All Interfaces)
-                      </div>
-                    </div>
-                  </div>
-                </button>
-
-                {/* Role Specific Demo User */}
-                {role === 'customer' && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('customer', 'customer@sastra.ac.in')}
-                    className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 hover:border-brand-indigo text-left transition-all hover:shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-brand-indigo-light text-brand-indigo flex items-center justify-center font-bold text-xs shrink-0">
-                        AS
-                      </div>
-                      <div className="overflow-hidden">
-                        <div className="font-semibold text-xs text-neutral-ink dark:text-neutral-dark-text truncate">
-                          Aarav S.
-                        </div>
-                        <div className="text-[10px] text-brand-indigo font-medium">customer@sastra.ac.in</div>
-                      </div>
-                    </div>
-                  </button>
-                )}
-
-                {role === 'helper' && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('helper', 'helper@sastra.ac.in')}
-                    className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 hover:border-brand-teal text-left transition-all hover:shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-brand-teal-light text-brand-teal flex items-center justify-center font-bold text-xs shrink-0">
-                        PK
-                      </div>
-                      <div className="overflow-hidden">
-                        <div className="font-semibold text-xs text-neutral-ink dark:text-neutral-dark-text truncate">
-                          Priya K.
-                        </div>
-                        <div className="text-[10px] text-brand-teal font-medium">helper@sastra.ac.in</div>
-                      </div>
-                    </div>
-                  </button>
-                )}
-
-                {role === 'club' && (
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemoLogin('club', 'admin@sastra.ac.in')}
-                    className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 hover:border-purple-600 text-left transition-all hover:shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        CA
-                      </div>
-                      <div className="overflow-hidden">
-                        <div className="font-semibold text-xs text-neutral-ink dark:text-neutral-dark-text truncate">
-                          Campus Admin
-                        </div>
-                        <div className="text-[10px] text-purple-600 font-medium">admin@sastra.ac.in</div>
-                      </div>
-                    </div>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Google Sign-in Option */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const googleEmail = role === 'helper' ? 'helper@sastra.ac.in' : 'customer@sastra.ac.in';
-                  handleQuickDemoLogin(role, googleEmail);
-                }}
-                className="w-full h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text flex items-center justify-center gap-2.5 transition-colors shadow-sm"
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Continue with SASTRA Google Workspace</span>
-              </button>
-
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
-                <span className="flex-shrink mx-3 text-[10px] text-neutral-placeholder uppercase font-medium">Or enter email</span>
-                <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
-              </div>
-            </div>
-
-            {/* Email Input Form */}
-            {!otpStep ? (
-              <form onSubmit={handleEmailSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                    Official SASTRA Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setError(null);
-                      }}
-                      className="w-full h-11 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo font-mono"
-                    />
-                  </div>
-                  <p className="text-[11px] text-neutral-secondary mt-1">
-                    Format must strictly be:{' '}
-                    <span className="font-mono text-brand-indigo font-semibold">
-                      your_reg_no@sastra.ac.in
-                    </span>
-                  </p>
+            {/* Google Workspace sign-in (primary path for students) */}
+            {role !== 'club' && (
+              <div className="space-y-2">
+                <GoogleSignInButton onCredential={handleGoogleCredential} />
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-neutral-placeholder uppercase font-medium">Or with email &amp; password</span>
+                  <div className="flex-grow border-t border-neutral-border dark:border-slate-700"></div>
                 </div>
+              </div>
+            )}
 
-                {/* Error Banner */}
-                {error && (
-                  <div className="p-3 rounded-input bg-semantic-danger-tint/60 dark:bg-semantic-danger/20 border border-semantic-danger/30 text-xs text-semantic-danger dark:text-semantic-danger-dark flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark active:scale-[0.98] text-white font-medium text-sm transition-all duration-150 shadow-sm flex items-center justify-center gap-2"
-                >
-                  <span>Send 4-Digit Verification Code</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            ) : (
-              /* OTP Verification Step */
-              <form onSubmit={handleOtpSubmit} className="space-y-4">
-                <div className="p-3 rounded-card bg-brand-indigo-light/40 dark:bg-brand-indigo/15 border border-brand-indigo/20 text-xs text-neutral-ink dark:text-neutral-dark-text">
-                  <span className="text-neutral-secondary block text-[11px]">Verification code sent to:</span>
-                  <span className="font-mono font-bold text-brand-indigo dark:text-brand-indigo-darkmode text-sm">
-                    {email}
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text">
-                      Enter 4-Digit Verification Code
+            {/* Credentials Form — real backend auth, no shortcuts */}
+            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+              {mode === 'register' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                      First Name
                     </label>
-                    <span className="text-[11px] text-brand-indigo font-medium">Demo Code: 4092</span>
-                  </div>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      maxLength={4}
                       required
-                      value={otpCode}
+                      value={firstName}
                       onChange={(e) => {
-                        setOtpCode(e.target.value.replace(/[^0-9]/g, ''));
+                        setFirstName(e.target.value);
                         setError(null);
                       }}
-                      className="w-full h-12 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-lg tracking-widest font-mono text-center text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                      className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        setError(null);
+                      }}
+                      className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
                     />
                   </div>
                 </div>
+              )}
 
-                {/* Error Banner */}
-                {error && (
-                  <div className="p-3 rounded-input bg-semantic-danger-tint/60 dark:bg-semantic-danger/20 border border-semantic-danger/30 text-xs text-semantic-danger dark:text-semantic-danger-dark flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark active:scale-[0.98] text-white font-medium text-sm transition-all duration-150 shadow-sm flex items-center justify-center gap-2"
-                >
-                  <span>
-                    Verify & Continue to{' '}
-                    {role === 'helper'
-                      ? 'Delivery Agent Feed'
-                      : role === 'club'
-                      ? 'Admin Console'
-                      : 'Customer Home'}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                  Official SASTRA Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError(null);
+                    }}
+                    className="w-full h-11 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-neutral-secondary mt-1">
+                  Format must strictly be:{' '}
+                  <span className="font-mono text-brand-indigo font-semibold">
+                    your_reg_no@sastra.ac.in
                   </span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                </p>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpStep(false);
-                    setOtpCode('');
-                    setError(null);
-                  }}
-                  className="w-full text-center text-xs text-neutral-secondary hover:text-brand-indigo transition-colors"
-                >
-                  ← Edit email address
-                </button>
-              </form>
-            )}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 text-neutral-secondary absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
+                    className="w-full h-11 pl-9 pr-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                  />
+                </div>
+              </div>
+
+              {/* Error Banner */}
+              {error && (
+                <div className="p-3 rounded-input bg-semantic-danger-tint/60 dark:bg-semantic-danger/20 border border-semantic-danger/30 text-xs text-semantic-danger dark:text-semantic-danger-dark flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark active:scale-[0.98] disabled:opacity-60 text-white font-medium text-sm transition-all duration-150 shadow-sm flex items-center justify-center gap-2"
+              >
+                <span>
+                  {submitting
+                    ? 'Signing in…'
+                    : mode === 'login'
+                    ? `Sign In to ${
+                        role === 'helper'
+                          ? 'Delivery Agent Feed'
+                          : role === 'club'
+                          ? 'Admin Console'
+                          : 'Customer Home'
+                      }`
+                    : 'Create Account & Sign In'}
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
           </div>
         )}
 

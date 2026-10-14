@@ -71,7 +71,9 @@ async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): P
 
 export const api = {
   // --- Auth ---
-  async login(email: string, password = 'TestPass123!') {
+  // Real auth only: the backend checks the password and issues the token.
+  // No client-side shortcuts, no seeded-password fallbacks.
+  async login(email: string, password: string) {
     const res = await apiFetch<{ token: string; user: any }>('/auth/login/', {
       method: 'POST',
       body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -82,28 +84,40 @@ export const api = {
 
   async register(data: {
     email: string;
-    password?: string;
+    password: string;
     role: 'customer' | 'helper';
     first_name?: string;
     last_name?: string;
     hostel_block?: string;
     pickup_point?: string;
   }) {
-    const password = data.password || 'TestPass123!';
     const res = await apiFetch<{ user: any; verification_token: string }>('/auth/register/', {
       method: 'POST',
       body: JSON.stringify({
         ...data,
         email: data.email.trim().toLowerCase(),
-        password,
+        policy_accept: true,
       }),
     });
-    // Auto-verify for student pilot convenience
+    // Pilot mode returns the verification token in the response (DEBUG /
+    // no-SMTP); auto-verify so registration completes in one step.
     if (res.verification_token) {
       await this.verifyEmail(res.verification_token);
     }
-    // Then log in
-    return this.login(data.email, password);
+    // Then log in with the credentials the user just chose
+    return this.login(data.email, data.password);
+  },
+
+  // Google Workspace sign-in: the backend verifies the ID token against
+  // GOOGLE_CLIENT_ID, enforces the @sastra.ac.in hosted domain, and
+  // auto-verifies the student. `role` is required only on FIRST sign-in.
+  async googleLogin(idToken: string, role?: 'customer' | 'helper') {
+    const res = await apiFetch<{ token: string; user: any }>('/auth/google/', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken, role }),
+    });
+    setStoredAuth(res.token, res.user);
+    return res;
   },
 
   async verifyEmail(token: string) {
@@ -122,28 +136,6 @@ export const api = {
       await apiFetch('/auth/logout/', { method: 'POST' });
     } finally {
       clearStoredAuth();
-    }
-  },
-
-  /**
-   * Fast 1-tap sign in: attempts to login with seeded password,
-   * or auto-creates and verifies the account if not present yet.
-   */
-  async quickLoginAs(role: 'customer' | 'helper', email: string, name?: string) {
-    try {
-      return await this.login(email);
-    } catch {
-      const parts = (name || email.split('@')[0]).split(' ');
-      const first_name = parts[0] || 'Student';
-      const last_name = parts.slice(1).join(' ') || (role === 'helper' ? 'Helper' : 'Customer');
-      return await this.register({
-        email,
-        role,
-        first_name,
-        last_name,
-        hostel_block: role === 'helper' ? 'Girls’ Hostel Area' : 'Hostel Block A, Room 312',
-        pickup_point: role === 'helper' ? 'Girls’ Hostel Area' : 'Boys’ Hostel Area',
-      });
     }
   },
 
