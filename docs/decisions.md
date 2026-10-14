@@ -6,6 +6,31 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D8 — "Ask NEEDIT" AI assistant: deferred to post-pilot (2026-10-14)
+
+**Decision:** The Gemini-based campus assistant (PR #33, closed unmerged)
+is **not in the pilot**. The architecture that was proposed is recorded so
+the post-pilot build doesn't re-litigate it: client-side Firebase AI Logic
+(browser → Gemini Developer API directly, no backend proxy), Firebase
+client key gated by App Check + reCAPTCHA Enterprise, model name in env,
+system prompt tuned to campus rules (veg-only, 13 delivery spots, fee
+range, photo/UPI/OTP security model). The backend is untouched by design.
+
+**Why deferred:** (1) no usage data to evaluate or tune against — shipping
+an LLM feature with zero evals is guessing; (2) a third platform console
+(Firebase project + App Check + reCAPTCHA) joins a pilot stack that just
+got *simpler* (D7); (3) prompt-injection and hallucinated-campus-facts
+surface with no moderation budget; (4) the pilot spine (auth → order →
+chat → pay → OTP handover) isn't live-tested end-to-end yet — that comes
+first. The pilot's Q&A need is covered by the pinned FAQ.
+
+**Revisit when:** pilot has real order volume and ≥50 real "would have
+asked the AI" questions collected from the report thread / support chat —
+that corpus is the eval set. Then ship it exactly as designed above
+(client-side, App-Check-gated, zero backend surface).
+
+---
+
 ## D7 — Pilot money: direct UPI customer→helper, no commission yet (2026-10-12)
 
 **Decision:** The pilot platform touches **zero money**. After price

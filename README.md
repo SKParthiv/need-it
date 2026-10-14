@@ -7,6 +7,10 @@ confirm the handover.
 
 **One repo, three surfaces. Read this before you push anything.**
 
+> **Building with AI assistance (or contributing at all)? Read
+> [`AGENTS.md`](AGENTS.md) first.** Hard rules: this repo is public — no
+> credentials, no real personal data, no auth bypasses, one feature per PR.
+
 ## Layout
 
 ```
