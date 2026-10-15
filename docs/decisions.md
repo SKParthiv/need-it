@@ -6,6 +6,46 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D11 — Lean-client doctrine: minimal API surface, poll small, delete first (2026-10-15)
+
+**Decision:** The frontend stays thin and the API surface stays small by
+rule, not by taste. The six rules live in `architecture.md` → "Client
+doctrine": server is the only source of truth (mock data in prod = bug); one
+data layer (`api.ts` + context); CRUD on existing resources before new
+endpoints, with state transitions as the deliberate POST exception; polling
+capped at chat 3 s / orders 5 s / notifications 15 s (pause hidden tabs
+before anything faster); only GETs cacheable, per-user data client-private,
+CDN never caches `/api/`; and delete-before-adding as the default move.
+
+**Why:** Two free-tier servers and a 0.5 GB database are the whole budget.
+Every endpoint, poll, and mock surface is load and confusion we pay for
+forever. Stateless tokens + external uploads + no sessions mean the app
+already scales horizontally — the doctrine's job is to not squander that.
+
+**Cost:** Features sometimes wait for the right CRUD shape instead of
+getting a quick bespoke endpoint. That's the point.
+
+---
+
+## D10 — Google Workspace is the only sign-in; no seed accounts (2026-10-15)
+
+**Decision:** The web client offers exactly one way in — "Continue with
+Google" on a SASTRA Workspace account (server verifies signature, audience,
+`email_verified`, and `hd` domain). The email/password form was removed from
+the client (endpoints remain for tests/ops). Seed/demo accounts are banned
+everywhere: `seed_test_accounts.py` deleted, production database purged of
+all fake users. First sign-in auto-creates the verified account.
+
+**Why over password registration:** Real accounts only — every order maps to
+a real student; no verification-email dependency (SendGrid becomes
+irrelevant); no shared demo credentials in a public repo (which already
+caused one incident in PR #33).
+
+**Cost:** Nobody can "just try it" without a sastra.ac.in Google account —
+that friction is the intended gate. Google outage = no sign-in; accepted.
+
+---
+
 ## D9 — Pilot money v2: merchant of record via Razorpay payment links (2026-10-14)
 
 **Decision:** The platform **collects** the customer's payment (merchant of

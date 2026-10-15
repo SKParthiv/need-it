@@ -36,7 +36,7 @@ contract. Read this file BEFORE writing any code.
 - `docs/userflow-v2.md` — **the master contract** (actors, auth, order
   spine, payment card payload, trust, do-NOT-build list).
 - `docs/state-machine.md` — order + payment states; the server owns them.
-- `docs/decisions.md` — why things are the way they are (D1–D8). If you
+- `docs/decisions.md` — why things are the way they are (D1–D11). If you
   change a decision, update the register in the same PR.
 - `docs/api-reference.md` — endpoint table.
 - If code and docs disagree, the **deployed backend** is truth — then fix
