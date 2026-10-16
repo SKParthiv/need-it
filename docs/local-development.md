@@ -1,8 +1,7 @@
 # Local Development & Testing
 
 Everything needed to run Need It on a laptop (Windows-first; macOS/Linux
-trivially adapted). Production deploys are elsewhere — see
-`deploy-free-tier.md` — you never need production access to develop.
+trivially adapted). Production deploys are elsewhere — see `runbook.md` — you never need production access to develop.
 
 ## Setup
 

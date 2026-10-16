@@ -39,7 +39,7 @@ You own everything the user sees and touches.
   Need data or an action that doesn't exist? That's a conversation, not a workaround.
 - **No business logic in the app.** Money math, status rules, who-can-do-what live in
   the backend. If you catch yourself writing a rule, stop.
-- Build against `docs/design-brief-v1.pdf`.
+- Build against `docs/userflow-v2.md`.
 
 ### ⚙️ Backend founder — `backend/`
 You own the truth.
@@ -47,8 +47,8 @@ You own the truth.
 - Every status and transition is enforced server-side; the app asks, only the backend says.
 
 ### 🤝 The contract — `docs/`
-- `PRD-v1.pdf` — what we're building.
-- `design-brief-v1.pdf` — what every screen must contain.
+- `userflow-v2.md` — the product contract: actors, auth, order spine.
+- `state-machine.md` — the status vocabulary the server enforces.
 - Status vocabulary: `open → accepted → purchased → handed_over → completed`
   (plus `cancelled`). Exact words, everywhere. They don't change without everyone agreeing.
 

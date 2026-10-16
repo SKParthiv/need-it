@@ -4,8 +4,7 @@
 This document is written to be machine-readable: every screen action maps
 to an exact API call, every state has an exact string, every rule names its
 enforcement point. If something here disagrees with the code, the code is
-wrong — file it. Supersedes `userflow-mindmap-v1.html`, `PRD-v1.pdf`, and
-`design-brief-v1.pdf` (kept as history).
+wrong — file it. Supersedes the archive/ artifacts (mindmap HTML, PRD PDF, design brief PDF — kept as history there).
 
 Ground rules:
 1. **The server owns all state.** Clients render state and POST intent;
