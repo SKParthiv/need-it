@@ -23,9 +23,24 @@ def payment_status(request, order_id):
         # No charge yet — report the ACTIVE provider so clients know which
         # pay UI to render before the payment row exists.
         return Response({"status": "none", "provider": get_provider().name})
-    return Response({"status": p.status, "item_cost": p.item_cost,
-                     "helper_fee": p.helper_fee, "total": p.total,
-                     "provider": p.provider or get_provider().name})
+    res = {"status": p.status, "item_cost": p.item_cost,
+           "helper_fee": p.helper_fee, "total": p.total,
+           "provider": p.provider or get_provider().name}
+    # Deep link only in manual mode — in gateway mode the platform collects
+    # and a direct-UPI link would bypass the escrow gate entirely.
+    if get_provider().name == "manual" and order.helper and order.helper.upi_id:
+        import urllib.parse
+        helper_name = order.helper.get_full_name() or order.helper.username or "Helper"
+        params = {
+            "pa": order.helper.upi_id,
+            "pn": helper_name,
+            "am": f"{p.total:.2f}",
+            "cu": "INR",
+            "tn": f"Need It order #{order.pk}",
+        }
+        res["upi_deep_link"] = f"upi://pay?{urllib.parse.urlencode(params)}"
+        res["helper_upi_id"] = order.helper.upi_id
+    return Response(res)
 
 
 @api_view(["POST"])
@@ -65,8 +80,21 @@ def pay(request, order_id):
         return Response(
             {"detail": "Online payment is not configured yet. Try again later."},
             status=503)
-    return Response({"status": payment.status, "total": payment.total,
-                     "paymentUrl": payment.payment_url or None}, status=201)
+    resp = {"status": payment.status, "total": payment.total,
+            "paymentUrl": payment.payment_url or None}
+    if payment.provider == "manual" and order.helper and order.helper.upi_id:
+        import urllib.parse
+        helper_name = order.helper.get_full_name() or order.helper.username or "Helper"
+        params = {
+            "pa": order.helper.upi_id,
+            "pn": helper_name,
+            "am": f"{payment.total:.2f}",
+            "cu": "INR",
+            "tn": f"Need It order #{order.pk}",
+        }
+        resp["upiDeepLink"] = f"upi://pay?{urllib.parse.urlencode(params)}"
+        resp["helperUpiId"] = order.helper.upi_id
+    return Response(resp, status=201)
 
 
 @api_view(["POST"])

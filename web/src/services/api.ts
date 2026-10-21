@@ -356,4 +356,33 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
+  // --- Collateral (D12) ---
+  async getCollateralStatus() {
+    return apiFetch<{ collateralBalance: number; role: string; isVerifiedStudent: boolean }>('/collateral/');
+  },
+
+  // --- Mobile Staff Admin (D13) ---
+  async getAdminOverview() {
+    return apiFetch<{ openOrders: number; activeOrders: number; totalUsers: number; pendingReports: number }>('/admin/overview/');
+  },
+
+  async getAdminReports() {
+    return apiFetch<{ reports: any[] }>('/admin/reports/');
+  },
+
+  async resolveAdminReport(reportId: number, status: string) {
+    return apiFetch<any>(`/admin/reports/${reportId}/resolve/`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async setHelperCollateral(userId: number, amount: number) {
+    return apiFetch<any>(`/admin/collateral/${userId}/`, {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+  },
 };
+

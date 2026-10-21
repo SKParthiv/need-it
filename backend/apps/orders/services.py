@@ -56,6 +56,22 @@ def accept(request_id, helper):
         _guarded_move(request_id, OrderStatus.OPEN, OrderStatus.ACCEPTED, helper, "helper accepted")
     if helper.role != "helper" or not helper.is_verified_student:
         raise IllegalTransition("only a verified helper can accept a request")
+    # D12: available collateral = deposit minus the expected totals of the
+    # helper's other active orders (None expected_total consumes nothing).
+    committed = sum(
+        other.expected_total or 0
+        for other in Request.objects.filter(
+            helper=helper,
+            status__in=[OrderStatus.ACCEPTED, OrderStatus.PURCHASED,
+                        OrderStatus.HANDED_OVER],
+        ).exclude(pk=request_id)
+    )
+    available = helper.collateral_balance - committed
+    if req.expected_total and available < req.expected_total:
+        raise IllegalTransition(
+            f"Insufficient collateral (₹{available} available) for a ₹{req.expected_total} order. "
+            "Ask a founder to raise your deposit."
+        )
     obj = _guarded_move(request_id, OrderStatus.OPEN, OrderStatus.ACCEPTED, helper, "helper accepted")
     Request.objects.filter(pk=request_id).update(helper=helper)
     from apps.notifications.services import notify

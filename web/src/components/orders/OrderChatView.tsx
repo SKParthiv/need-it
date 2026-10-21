@@ -854,10 +854,10 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 <QrCode className="w-5 h-5 text-brand-teal" />
                 <div>
                   <h3 className="font-heading font-extrabold text-sm sm:text-base text-neutral-ink dark:text-neutral-dark-text">
-                    Direct UPI Payment
+                    Advance Direct UPI Payment
                   </h3>
                   <span className="text-[10px] text-neutral-secondary">
-                    Pilot Model: Customer → Helper direct (₹0 Platform Fee)
+                    Advance UPI (D12) · Guaranteed by Helper Collateral Deposit · ₹0 Platform Fee
                   </span>
                 </div>
               </div>
@@ -940,7 +940,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   <ClientQrCode value={upiDeepLink} size={170} />
                 </div>
                 <span className="text-[11px] text-neutral-secondary text-center">
-                  Scan using Google Pay, PhonePe, or Paytm
+                  Suggested amount covers the minimum helper fee — you choose the final fee (₹20–50) when you tap I've paid. Scan with FamPay, GPay, PhonePe, or Paytm.
                 </span>
 
                 {/* "Pay in UPI app" Button */}
@@ -949,7 +949,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   className="w-full sm:w-auto px-6 h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-bold inline-flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-[0.98]"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>Pay in UPI app (₹{finalTotal})</span>
+                  <span>Pay ₹{finalTotal} in UPI App (FamPay, GPay, PhonePe)</span>
                 </a>
               </div>
             ) : (
