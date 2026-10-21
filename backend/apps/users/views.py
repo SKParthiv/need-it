@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from .models import User
 from .serializers import RegisterSerializer, UserSerializer
@@ -221,3 +221,87 @@ def login(request):
 def logout(request):
     Token.objects.filter(user=request.user).delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def collateral_status(request):
+    return Response({
+        "collateralBalance": getattr(request.user, "collateral_balance", 200),
+        "role": request.user.role,
+        "isVerifiedStudent": request.user.is_verified_student,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_overview(request):
+    from apps.orders.models import Request, OrderStatus
+    from apps.reports.models import Report
+    return Response({
+        "openOrders": Request.objects.filter(status=OrderStatus.OPEN).count(),
+        "activeOrders": Request.objects.exclude(
+            status__in=[OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+        ).count(),
+        "totalUsers": User.objects.count(),
+        "pendingReports": Report.objects.filter(status=Report.Status.OPEN).count(),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def admin_set_collateral(request, user_id):
+    user = User.objects.filter(pk=user_id).first()
+    if not user:
+        return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        user.collateral_balance = max(0, int(request.data.get("amount", 200)))
+        user.save(update_fields=["collateral_balance"])
+    except (TypeError, ValueError):
+        return Response({"detail": "Invalid amount."}, status=status.HTTP_400_BAD_REQUEST)
+    # Audit + visibility: the affected user always sees their new deposit.
+    import logging
+    logger = logging.getLogger("django.request")
+    logger.info("collateral set user_id=%s amount=%s actor=%s request_id=%s",
+                user.pk, user.collateral_balance, request.user.pk, request.headers.get("X-Request-ID", "-"))
+    from apps.notifications.services import notify
+    from apps.notifications.models import Notification
+    notify(user, Notification.Type.BROADCAST, "Deposit updated",
+           f"Your security deposit is now ₹{user.collateral_balance}.", order=None)
+    return Response({"userId": user.pk, "collateralBalance": user.collateral_balance})
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def admin_reports_list(request):
+    from apps.reports.models import Report
+    from apps.reports.views import _serialize
+    qs = Report.objects.all().order_by("-created_at")[:50]
+    return Response({"reports": [_serialize(r) for r in qs]})
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def admin_resolve_report(request, report_id):
+    from apps.reports.models import Report
+    from apps.reports.views import _serialize
+    report = Report.objects.filter(pk=report_id).first()
+    if not report:
+        return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
+    status_val = request.data.get("status")
+    if status_val not in Report.Status.values:
+        return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+    blame = request.data.get("blame")
+    if blame is not None and blame not in ("customer", "helper"):
+        return Response({"detail": "Invalid blame. Use 'customer' or 'helper'."}, status=status.HTTP_400_BAD_REQUEST)
+    report.status = status_val
+    report.save(update_fields=["status"])
+    if blame:
+        # Mirror the /admin/ resolve actions: count one problem against the
+        # accused party (idempotent per report via ProblemEvent.report).
+        from apps.trust.services import record_problem
+        from apps.trust.models import ProblemEvent
+        accused = report.order.helper if blame == "helper" else report.order.customer
+        record_problem(accused, ProblemEvent.Kind.REPORT,
+                       order=report.order, report=report)
+    return Response(_serialize(report))

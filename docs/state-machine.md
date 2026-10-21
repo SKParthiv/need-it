@@ -14,13 +14,13 @@ everyone agreeing.
 
 | From | To | Trigger | Guard |
 |---|---|---|---|
-| open | accepted | Helper accepts | Atomic `UPDATE ... WHERE status='open'` — exactly one helper wins; loser gets 409 |
-| accepted | open | Helper releases, **or** payment-timeout job fires | Only before purchase; helper is cleared |
-| accepted | purchased | Helper marks purchased | **Escrow gate: payment must be `held`** — helper never fronts cash |
-| accepted | cancelled | Customer cancels before purchase | Triggers refund if payment exists |
+| open | accepted | Helper accepts | Atomic `UPDATE ... WHERE status='open'` + Helper collateral $\ge$ order total — exactly one helper wins; loser gets 409 |
+| accepted | open | Helper releases, **or** payment-timeout job fires | Only before purchase; helper is cleared, collateral uncommitted |
+| accepted | purchased | Helper marks purchased | **Gate: payment must be `held`** (advance received by helper) — helper never fronts cash |
+| accepted | cancelled | Customer cancels before purchase | Triggers reimbursement if advance was confirmed |
 | purchased | handed_over | Helper enters the customer's 4-digit OTP | Single attestation — the customer SHOWS it, the helper ENTERS it |
 | purchased | cancelled | Customer cancels **with helper agreement** | Dispute path |
-| handed_over | completed | Settlement webhook confirms release | Mechanical — no human step |
+| handed_over | completed | Handover validated | Mechanical — releases payment record and uncommits helper collateral |
 | completed / cancelled | — | terminal | No further transitions |
 
 Any transition not in this table is impossible: the service layer rejects it,
@@ -30,43 +30,37 @@ and the guarded write means a stale or double action can never corrupt state.
 
 `none → pending → held → released` · `pending → failed` · `held → refunded`
 
-**Pilot semantics (D9): merchant of record.** After the customer approves
-prices, `pay` creates a Razorpay **payment link** (item cost + chosen fee)
-into the PLATFORM's account (→ `pending`); the gateway's **signed webhook**
-(`payment_link.paid`) is the only thing that sets `held` — the money is
-provably in before the helper spends a rupee. On OTP handover the ledger
-flips to `released` and a **payout** to the helper is born (`due`);
-the founder settles it manually via UPI and records the UTR
-(`admin/payouts/<id>/mark-paid/`). Zero commission in pilot
-(`PLATFORM_CUT_PER_ORDER=0`). Cancel before purchase → refund via the
-Razorpay dashboard → `refunded`.
-
-**Demo/fallback semantics (`PAYMENT_PROVIDER=manual`):** the customer pays
-the helper directly (UPI QR composed client-side from the helper's
-`upi_id`), both sides attest via `confirm-payment`, and no payout rows are
-created — the platform never touches money. The order machine is
-identical; only who holds the money changes.
+**Pilot semantics (D12): Helper Collateral + Advance Direct UPI.**
+After the customer approves actual shelf prices, the server posts a payment
+card with a universal UPI deep link (`upi://pay`) and dynamic QR code:
+1. Customer initiates transfer in FamPay/GPay/PhonePe/Paytm and taps "I've Sent Payment" (→ `pending`).
+2. Helper verifies the credit in their bank/UPI app and taps "Confirm Receipt"
+   (→ `held`, held under collateral guard).
+3. `held` payment unlocks `accepted → purchased` — the helper purchases items
+   at the store using the customer's advance money (helpers never front cash).
+4. Customer meets helper and shows the 4-digit OTP. Helper inputs the code:
+   payment flips to `released`, order is marked `completed`, and the helper's
+   committed collateral is released.
+5. If helper absconds after receiving advance money, the customer is reimbursed
+   from the helper's collateral deposit (→ `refunded`) and the helper's account
+   is banned.
+6. Zero commission in pilot (`PLATFORM_CUT_PER_ORDER=0`).
 
 | Payment event | Effect on order |
 |---|---|
-| `held` | Unlocks `accepted → purchased` |
+| `held` (advance confirmed received) | Unlocks `accepted → purchased` |
 | `failed` | Order stays `accepted`; customer retries |
-| Timeout (no payment after price approval) | Order auto-releases to `open`, helper notified |
-| OTP confirmed | Release recorded (ledger flip, idempotent) → order `completed` |
-| Cancel before purchase | Refund → `refunded` |
-
-Post-pilot, the commission version (helper pays the platform a flat fee per
-order, deducted from the payout) is a one-line env flip — see decisions.md D9.
+| Timeout (no payment after price approval) | Order auto-releases to `open`, helper cleared, collateral released |
+| OTP confirmed | Release recorded → order `completed` |
+| Ghosting / flake after advance payment | Customer reimbursed from helper collateral → `refunded` |
 
 ## Money rules
 
 - Charge the **actual confirmed amount** (item cost + helper fee), never the expected-price guess.
 - Price approval is **evidence-based**: the helper attaches a shelf/receipt photo (`evidencePhotoUrl` on the item) when proposing a price; the customer approves what they can see. Photos upload straight to Cloudinary with a server-issued signature — our API never proxies bytes.
-- The customer pays the **platform's payment link** (merchant of record).
-  Only the gateway's signed webhook marks `held`; the helper buys only
-  after that — helpers never front their own cash.
-- Handover OTP = attestation. The code is born at `mark_purchased`, renders in the API **only to the customer**, and the helper entering it correctly means the items physically changed hands — payment releases in the same guarded transition. 5 wrong codes lock the endpoint (founder unlocks via `/admin/`).
-- Webhooks: verify signature; dedupe on gateway event ID (retries are idempotent).
+- Direct advance payment: Customer pays helper directly via universal `upi://pay` deep link or dynamic QR. Helper shops only with customer's advance funds — helpers never front their own cash.
+- Helper collateral guarantee: Helper maintains a ₹200 refundable security deposit. Uncommitted collateral must cover order goods cost. Flaking or ghosting forfeits collateral to reimburse the customer.
+- Handover OTP = attestation. The code is born at `mark_purchased`, renders in the API **only to the customer**, and the helper entering it correctly means the items physically changed hands. 5 wrong codes lock the endpoint (founder unlocks via `/admin/`).
 
 ## The three rules
 

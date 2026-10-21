@@ -8,8 +8,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ("id", "username", "name", "college_email", "email", "role",
                   "hostel_block", "pickup_point", "is_verified_student",
-                  "status", "joined_date", "upi_id", "problems", "blocked")
-        read_only_fields = ("is_verified_student",)
+                  "status", "joined_date", "upi_id", "collateral_balance",
+                  "problems", "blocked")
+        read_only_fields = ("is_verified_student", "collateral_balance")
 
     name = serializers.SerializerMethodField()
     college_email = serializers.EmailField(source="email", read_only=True)

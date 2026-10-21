@@ -274,3 +274,32 @@ class ProfilePatchTests(APITestCase):
         user.refresh_from_db()
         self.assertEqual(user.role, "customer")  # whitelist silently drops the rest
         self.assertFalse(user.is_staff)
+
+    def test_collateral_status_endpoint(self):
+        user = User.objects.create_user("u-col", password="x", role="helper", is_verified_student=True)
+        self.client.force_authenticate(user=user)
+        resp = self.client.get("/api/collateral/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["collateralBalance"], 200)
+
+    def test_admin_endpoints_require_staff(self):
+        regular_user = User.objects.create_user("reg", password="x")
+        self.client.force_authenticate(user=regular_user)
+        resp = self.client.get("/api/admin/overview/")
+        self.assertEqual(resp.status_code, 403)
+
+        staff_user = User.objects.create_user("staff", password="x", is_staff=True)
+        self.client.force_authenticate(user=staff_user)
+        resp = self.client.get("/api/admin/overview/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("openOrders", resp.json())
+
+    def test_admin_can_set_collateral(self):
+        staff_user = User.objects.create_user("staff2", password="x", is_staff=True)
+        target_helper = User.objects.create_user("h-target", password="x", role="helper", collateral_balance=200)
+        self.client.force_authenticate(user=staff_user)
+        resp = self.client.post(f"/api/admin/collateral/{target_helper.id}/", {"amount": 500}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        target_helper.refresh_from_db()
+        self.assertEqual(target_helper.collateral_balance, 500)
+

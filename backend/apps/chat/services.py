@@ -64,7 +64,21 @@ def post_payment_card(order, actor):
     }
     if pay_mode == "upi":
         card["upiId"] = upi_id
-        text = "Payment card — pay the helper directly via UPI, then tap \"I've paid\"."
+        import urllib.parse
+        helper_name = helper.get_full_name() or helper.username or "Helper"
+        suggested_total = item_cost + settings.HELPER_FEE_MIN
+        params = {
+            "pa": upi_id,
+            "pn": helper_name,
+            "am": f"{suggested_total:.2f}",
+            "cu": "INR",
+            "tn": f"Need It order #{order.pk}",
+        }
+        card["helperName"] = helper_name
+        card["upiDeepLink"] = f"upi://pay?{urllib.parse.urlencode(params)}"
+        text = ("Payment card — pay the helper directly via UPI (suggested amount "
+                "covers the minimum fee; you pick the helper fee ₹20–50 when "
+                "confirming), then tap \"I've paid\".")
     else:
         text = ("Payment card — pay securely via the link. The platform holds "
                 "the money and releases it to the helper after the handover OTP.")

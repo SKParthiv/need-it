@@ -47,14 +47,28 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | POST | `requests/<id>/cancel/` | participant | refunds pending/held payment; post-purchase needs helper agreement |
 | POST | `requests/<id>/release/` | — | legacy manual release; the handover path releases automatically |
 
-## Payments
+## Payments (D12: Advance Direct UPI)
 
 | Method | Path | Who | Body → Response |
 | --- | --- | --- | --- |
-| GET | `orders/<id>/payment-status/` | participant | — → `{status, item_cost, helper_fee, total, provider}`. `provider` (`manual`/`razorpay_base`) tells the client which pay UI to render, even before a payment row exists |
-| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total, paymentUrl?}`. Requires accepted order + all available items price-approved. Idempotent. `paymentUrl` present in gateway mode (`razorpay_base`) — open it, customer pays there. **503 when the gateway provider is selected but keys aren't configured** |
-| POST | `orders/<id>/confirm-payment/` | both | manual mode: each side confirms the UPI transfer; both → `held`. **400 in gateway mode** — the signed webhook is the only confirmer |
-| POST | `webhooks/payment/` | Razorpay only | HMAC-SHA256 signature-verified, event-id deduped; `payment_link.paid` flips the order's payment `pending → held` (the escrow gate) |
+| GET | `orders/<id>/payment-status/` | participant | — → `{status, item_cost, helper_fee, total, provider, upi_deep_link?}` |
+| POST | `orders/<id>/pay/` | customer | `{helperFee}` (₹20–50) → `{status:"pending", total, upi_deep_link}`. In D12 mode, generates the universal `upi://pay` intent link (FamPay/GPay/PhonePe/Paytm) and dynamic QR payload. Idempotent |
+| POST | `orders/<id>/confirm-payment/` | both | Customer marks sent; Helper marks confirmed received → `held` (held under collateral guard). Gates `mark-purchased` |
+
+## Helper Collateral & Mobile Admin (D12, D13)
+
+| Method | Path | Who | Body / Effect |
+| --- | --- | --- | --- |
+| GET | `collateral/` | helper | `{collateral_balance, committed_amount, available_balance}` — guard for accepting open requests |
+| GET | `admin/overview/` | staff only | Metrics for `/app/admin` mobile dashboard: live orders, pending reports, active helpers |
+| POST | `admin/collateral/<user_id>/record-deposit/` | staff only | `{amount, notes}` — records helper refundable security deposit |
+| POST | `admin/collateral/<user_id>/refund/` | staff only | `{amount}` — records security deposit return to helper |
+
+## Dataset & Analytics (D14)
+
+| Command / Tool | Environment | Effect |
+| --- | --- | --- |
+| `python manage.py export_errand_dataset` | Backend CLI | Dumps privacy-scrubbed, de-identified errand logs (`.parquet` / `.csv`) for Kaggle/AI dataset pipeline per `docs/ai-roadmap.md` |
 
 ## Chat
 
@@ -85,7 +99,7 @@ Emails must match `COLLEGE_EMAIL_DOMAINS` (sastra.ac.in in production).
 | POST | `reports/file/` | order participant | `{orderId, reason, details?}` |
 | GET | `reports/` | authed | my filed reports |
 
-Resolution is manual by founders in `/admin/`; the blame actions there
+Resolution is manual by founders via `/app/admin` or Django `/admin/`; the blame actions
 (resolve against customer/helper) feed the trust problem counts below.
 
 ## Trust
@@ -99,16 +113,3 @@ customers can't post (403 with reason). Sources: admin-confirmed reports
 (blame actions on the Reports admin page) + flakes (helper cancels after
 accepting, or lets an accepted order go stale). Thresholds live in
 `/admin/` → Trust policy — tune them live during the pilot.
-
-## Payouts (merchant of record)
-
-Completing an order creates one Payout when the active provider settles via the
-platform (MoR). `amount = item_cost + helper_fee − PLATFORM_CUT_PER_ORDER`.
-Manual-UPI mode creates no payout (money moved customer→helper directly).
-
-| Method | Path | Who | Body / Effect |
-| --- | --- | --- | --- |
-| GET | `admin/payouts/?status=due` | staff | due (or `paid`/`all`) payouts with helper UPI ID + amount breakdown |
-| POST | `admin/payouts/<id>/mark-paid/` | staff | `{utr}` — guarded: 409 if already settled |
-| GET | `earnings/` | authed | own payouts + `dueTotal`/`paidTotal` (helpers) |
-| PATCH | `me/` | authed | `{upi_id?}` — helper payout address (validated) |

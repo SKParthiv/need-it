@@ -465,3 +465,51 @@ class PaymentCardGatewayModeTests(TestCase):
                                 {"helperFee": 30}, format="json")
         self.assertEqual(resp.status_code, 503)
 
+
+class HelperCollateralTests(TestCase):
+    def setUp(self):
+        self.cust = User.objects.create_user("c@sastra.ac.in", password="x")
+        self.helper = User.objects.create_user("h@sastra.ac.in", password="x",
+                                               role="helper", is_verified_student=True,
+                                               collateral_balance=200, upi_id="h@upi")
+        self.req = make_req(self.cust)  # expected_total = 100
+
+    def test_helper_sufficient_collateral_can_accept(self):
+        obj = services.accept(self.req.id, self.helper)
+        self.assertEqual(obj.status, OrderStatus.ACCEPTED)
+
+    def test_helper_insufficient_collateral_cannot_accept(self):
+        self.helper.collateral_balance = 50
+        self.helper.save(update_fields=["collateral_balance"])
+        with self.assertRaises(services.IllegalTransition):
+            services.accept(self.req.id, self.helper)
+
+    def test_collateral_commits_across_active_orders(self):
+        # D12: the deposit is consumed by active orders — ₹200 collateral,
+        # first ₹150 order accepted leaves ₹50 available.
+        self.req.expected_total = 150
+        self.req.save(update_fields=["expected_total"])
+        services.accept(self.req.id, self.helper)
+        second = make_req(self.cust)  # expected_total = 100
+        with self.assertRaises(services.IllegalTransition):
+            services.accept(second.id, self.helper)
+        # A ₹50 order still fits in the remaining ₹50.
+        second.expected_total = 50
+        second.save(update_fields=["expected_total"])
+        obj = services.accept(second.id, self.helper)
+        self.assertEqual(obj.status, OrderStatus.ACCEPTED)
+
+    def test_manual_mode_card_has_upi_deep_link(self):
+        from rest_framework.test import APIClient
+        services.accept(self.req.id, self.helper)
+        RequestItem.objects.create(request=self.req, name="Item 1", expected_price=50, actual_price=50)
+        client = APIClient()
+        client.force_authenticate(self.cust)
+        client.post(f"/api/requests/{self.req.id}/approve-price/", {}, format="json")
+        cards = [m.card for m in self.req.messages.filter(is_system_notice=True) if m.card]
+        self.assertEqual(len(cards), 1)
+        self.assertIn("upiDeepLink", cards[0])
+        self.assertTrue(cards[0]["upiDeepLink"].startswith("upi://pay?"))
+        self.assertIn("pa=h%40upi", cards[0]["upiDeepLink"])
+
+

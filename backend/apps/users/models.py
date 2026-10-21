@@ -19,5 +19,10 @@ class User(AbstractUser):
             "Enter a valid UPI ID (e.g. name@okhdfcbank).")],
         help_text="Helper payout address — founders settle payouts to this UPI ID.",
     )
+    collateral_balance = models.PositiveIntegerField(
+        default=200,
+        help_text="Helper refundable security deposit in INR (D12).",
+    )
 
     # TODO: college-email domain allowlist + verification token flow (PRD §1).
+

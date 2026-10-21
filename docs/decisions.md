@@ -6,6 +6,87 @@ successor — because the reasoning is the valuable part.
 
 ---
 
+## D14 — Anonymized errand dataset pipeline for future AI (2026-10-19)
+
+**Decision:** Zero AI model execution in the pilot. The system focuses
+exclusively on structured, privacy-preserving instrumentation: logging
+anonymized order features into an exportable dataset (Kaggle/Parquet schema)
+for future fine-tuning and recommendations. All student PII (roll numbers,
+student names, phone numbers, exact room numbers) is de-identified and stripped
+at collection time. Details in `docs/ai-roadmap.md`.
+
+**Why:** (1) Campus errand recommendations (dynamic price estimation,
+willingness-to-deliver fee ranges, weather-based canteen demand) require high-quality
+domain-specific ground truth that does not exist in public models; (2) Running
+LLM models in pilot adds latency, inference costs, and prompt-injection risks
+without a validated eval set; (3) Clean dataset collection prepares the foundation
+for fine-tuned student-assistant models post-pilot at zero runtime cost.
+
+**Cost:** Features requiring AI smarts wait until sufficient anonymized errand
+volume (1,000+ orders) is logged.
+
+---
+
+## D13 — Authenticated staff admin portal (/app/admin) (2026-10-19)
+
+**Decision:** The platform provides a responsive, mobile-friendly admin page
+inside the React app (`/app/admin`) strictly gated by Django's `user.is_staff`
+claim (verified via `/api/me/`). It allows founders to review dispute reports,
+manage helper collateral balances, and monitor live orders from their phones.
+Clarifies `userflow-v2.md` §8: the ban was on *unauthenticated dev backdoors*
+(such as PR #33), not on legitimate, authenticated staff operations.
+
+**Why:** Django's native `/admin/` is clumsy on mobile phones when founders need
+to quickly resolve an urgent campus dispute or approve a helper collateral
+deposit between classes. A clean, token-authenticated mobile interface inside
+the main app resolves this without compromising security.
+
+**Cost:** One extra frontend route and DRF permission check (`IsAdminUser`) to
+maintain.
+
+---
+
+## D12 — Pilot money v3: helper collateral + advance direct UPI (2026-10-19)
+
+**Decision:** Platform touches zero money. Escrow and Merchant-of-Record (MoR)
+via payment links (D9) are replaced for the pilot by **Direct Advance UPI**
+backed by **Helper Collateral (Security Deposit)**:
+1. Helpers hold a founder-verified refundable security balance (e.g. ₹200,
+   a ledger record — no money moves in the pilot) before accepting orders.
+   An order's expected total cannot exceed the helper's uncommitted
+   collateral (deposit minus the expected totals of their other active
+   orders).
+2. Helper proposes actual store prices with shelf photos; customer approves.
+3. Customer pays the helper directly in advance via a universal UPI deep link
+   (`upi://pay?pa=...&am=...&cu=INR&tn=...` covering FamPay, Google Pay,
+   PhonePe, Paytm) and dynamic QR code.
+4. Helper verifies credit in their UPI app, marks payment received, and buys
+   the items with the customer's advance money (zero cash fronted by helper).
+5. Delivery is attested via the customer's 4-digit OTP.
+6. Customer safety guarantee: If a helper takes the advance and ghosts, the
+   customer is reimbursed from the helper's security deposit, and the helper's
+   verified SASTRA student account is permanently banned and reported.
+7. Commission: ₹0 during the pilot to maximize liquidity. Collateral balance
+   serves as the seamless deduction seam for post-pilot commission.
+
+**Why over D9 (Merchant of Record):**
+(1) **Helpers cannot front cash**: In campus errands, broke student helpers
+cannot afford to front ₹300–₹500 of their own money while waiting for escrow
+release; advance UPI gives the helper the customer's funds to make the purchase.
+(2) **Legal & Banking reality**: RBI PA marketplace regulations require
+₹40L–₹5Cr turnover, and a merchant account requires registered business KYC,
+tax accounts, and chargeback liabilities that are inappropriate for an early
+unincorporated student pilot.
+(3) **Universal UPI coverage**: Direct `upi://pay` deep links launch the
+student's preferred app natively, including FamPay and student neo-banks,
+without gateway transaction fees (~2%).
+
+**Cost:** Platform founders hold and track helper collateral deposits manually;
+new helpers face the initial friction of depositing ₹200 (refundable) before
+taking orders.
+
+---
+
 ## D11 — Lean-client doctrine: minimal API surface, poll small, delete first (2026-10-15)
 
 **Decision:** The frontend stays thin and the API surface stays small by
@@ -46,7 +127,7 @@ that friction is the intended gate. Google outage = no sign-in; accepted.
 
 ---
 
-## D9 — Pilot money v2: merchant of record via Razorpay payment links (2026-10-14)
+## ~~D9 — Pilot money v2: merchant of record via Razorpay payment links (2026-10-14)~~ → superseded by D12 (helper collateral + advance direct UPI)
 
 **Decision:** The platform **collects** the customer's payment (merchant of
 record on a BASE Razorpay account — payment links into the platform's bank

@@ -17,8 +17,9 @@ wins — update this file in the same PR.
 | Background jobs | none | `sweep_stale_accepted()` runs lazily on every feed read |
 
 Deliberately absent (do not re-add without a reason): Celery/Redis, Docker-in-prod,
-Shops module (cut for pilot), a backend admin API (founder ops live in /admin/),
-Ask NEEDIT (D8: deferred until there is real data).
+Shops module (cut for pilot), unauthenticated admin backdoors (PR #33; mobile founder
+ops live at authenticated `/app/admin`, D13), AI model runtime inference in pilot
+(D14: anonymized data collection only per `docs/ai-roadmap.md`).
 
 ## Monorepo layout
 
@@ -61,17 +62,19 @@ call after that.
 
 ## Payment provider seam
 
-The state machine never touches a gateway. It calls the `PaymentProvider`
+The state machine never touches a gateway directly. It calls the `PaymentProvider`
 interface (`apps/payments/providers.py`); `PAYMENT_PROVIDER` picks the mode.
 
-- **`manual`** (code default) — both sides confirm an out-of-band UPI transfer;
-  `held` is a record that gates the machine. Zero-dependency demo/local mode.
-- **`razorpay_base`** (pilot's deployed mode, D9) — platform is merchant of
-  record. `/pay` creates a Razorpay Payment Link into the platform account; the
-  **signed webhook** is the only thing that marks money `held`. Release at
-  handover is a ledger flip; founders settle helpers from the payout console
-  (`PLATFORM_CUT_PER_ORDER=0` in pilot).
-- **`razorpay_route`** (stub) — true gateway escrow. Blocked by RBI's PA
+- **`manual`** (`advance_upi`, pilot active mode per D12) — Direct Advance UPI
+  backed by Helper Collateral. The backend composes a universal `upi://pay` deep
+  link and dynamic QR code; customer pays helper directly in advance; helper
+  confirms receipt; helper collateral guarantees customer against ghosting.
+  Platform touches zero money and charges ₹0 commission.
+- **`razorpay_base`** (D9) — Merchant of record on a BASE Razorpay account:
+  `/pay` creates a Razorpay Payment Link into the platform account; the
+  **signed webhook** is the only thing that marks money `held`. Available as an
+  alternate provider for off-campus expansion.
+- **`razorpay_route`** (stub) — True gateway escrow. Blocked by RBI's PA
   guidelines (₹40L domestic turnover, enforced Jan 1 2026) — the stub is the
   marked seam for that future.
 
