@@ -35,7 +35,9 @@ interface WebAppContextType {
     hostel: string;
     pickupPoint: string;
     isVerified: boolean;
+    upiId?: string;
   };
+  updateCurrentUser: (patch: Partial<WebAppContextType['currentUser']>) => void;
   isSuperAdmin: boolean;
   authorizedAdminEmails: string[];
   loginAsRole: (role: UserRole, customEmail?: string, password?: string) => Promise<void>;
@@ -48,9 +50,12 @@ interface WebAppContextType {
   getOrderById: (orderId: string) => Order | undefined;
   chats: Record<string, ChatConversation>;
   getChatByOrderId: (orderId: string) => ChatConversation | undefined;
+  fetchMessages: (orderId: string) => Promise<void>;
   sendMessage: (orderId: string, text: string, photoUrl?: string) => Promise<void>;
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => Promise<void>;
+  rateOrder: (orderId: string, rating: number, feedback?: string) => Promise<void>;
   proposePrice: (orderId: string, itemId: string, price: number, evidencePhotoUrl?: string) => Promise<void>;
   approvePrices: (orderId: string) => Promise<void>;
   payOrder: (orderId: string, fee?: number) => Promise<void>;
@@ -66,6 +71,7 @@ const DEFAULT_USERS = {
     hostel: 'Ananda Vihar (BH)',
     pickupPoint: 'Canopy Canteen',
     isVerified: true,
+    upiId: '',
   },
   helper: {
     name: 'Priya K.',
@@ -74,6 +80,7 @@ const DEFAULT_USERS = {
     hostel: 'Vaidehi / VK (GH)',
     pickupPoint: 'Library Circle',
     isVerified: true,
+    upiId: 'helper@okhdfc',
   },
   club: {
     name: 'Campus Safety Council Admin',
@@ -82,6 +89,7 @@ const DEFAULT_USERS = {
     hostel: 'Admin / Council HQ',
     pickupPoint: 'Main Gate Security',
     isVerified: true,
+    upiId: '',
   },
 };
 
@@ -137,7 +145,11 @@ const WebAppContext = createContext<WebAppContextType | null>(null);
 
 export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<UserRole>('customer');
-  const [currentUser, setCurrentUser] = useState(DEFAULT_USERS.customer);
+  const [currentUser, setCurrentUser] = useState<WebAppContextType['currentUser']>(DEFAULT_USERS.customer);
+
+  const updateCurrentUser = (patch: Partial<WebAppContextType['currentUser']>) => {
+    setCurrentUser((prev) => ({ ...prev, ...patch }));
+  };
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [chats, setChats] = useState<Record<string, ChatConversation>>({});
@@ -155,7 +167,20 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       let backendReqs: any[] = [];
       if (role === 'helper') {
-        backendReqs = await api.getFeed();
+        const feedReqs = await api.getFeed().catch(() => []);
+        const myJobs = await api.getMyRequests().catch(() => []);
+        const seen = new Set<string | number>();
+        const merged: any[] = [];
+        for (const item of [
+          ...(Array.isArray(myJobs) ? myJobs : []),
+          ...(Array.isArray(feedReqs) ? feedReqs : []),
+        ]) {
+          if (item && item.id != null && !seen.has(item.id)) {
+            seen.add(item.id);
+            merged.push(item);
+          }
+        }
+        backendReqs = merged;
       } else {
         backendReqs = await api.getMyRequests();
       }
@@ -168,6 +193,31 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.warn('Backend orders refresh fallback:', err);
     }
   }, [role]);
+
+  // Load notifications from backend
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const token = getStoredToken();
+      if (!token) return;
+      const res = await api.getNotifications();
+      if (res && Array.isArray(res.notifications)) {
+        const mapped = res.notifications.map((n: any) => ({
+          id: String(n.id),
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          orderId: n.orderId ? String(n.orderId) : undefined,
+          read: !!n.read,
+          timestamp: n.timestamp
+            ? new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Just now',
+        }));
+        setNotifications(mapped);
+      }
+    } catch (err) {
+      console.warn('Backend notifications refresh notice:', err);
+    }
+  }, []);
 
   // Initial auth restoration & periodic sync
   useEffect(() => {
@@ -182,15 +232,20 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         hostel: user.hostel_block || 'Campus Hostel',
         pickupPoint: user.pickup_point || 'Boys’ Hostel Area',
         isVerified: !!user.is_verified_student,
+        upiId: user.upi_id || '',
       });
     }
   }, []);
 
   useEffect(() => {
     refreshOrders();
-    const timer = setInterval(refreshOrders, 5000);
+    refreshNotifications();
+    const timer = setInterval(() => {
+      refreshOrders();
+      refreshNotifications();
+    }, 5000);
     return () => clearInterval(timer);
-  }, [refreshOrders]);
+  }, [refreshOrders, refreshNotifications]);
 
   const login = async (email: string, password?: string, preferredRole: UserRole = 'customer') => {
     const trimmedEmail = email.trim().toLowerCase();
@@ -209,6 +264,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         hostel: 'Ananda Vihar (BH)',
         pickupPoint: 'Canopy Canteen',
         isVerified: true,
+        upiId: '',
       });
       // Synchronize backend auth in the background without blocking the UI
       api.login(trimmedEmail, finalPassword).catch((err) => {
@@ -230,6 +286,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           hostel: res.user.hostel_block || 'Ananda Vihar (BH)',
           pickupPoint: res.user.pickup_point || 'Canopy Canteen',
           isVerified: !!res.user.is_verified_student,
+          upiId: res.user.upi_id || '',
         });
       }
     } catch (err) {
@@ -308,37 +365,55 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     status: OrderStatus,
     extra?: Partial<Order>
   ) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status, ...extra } : o))
-    );
-
     const numericId = parseInt(orderId, 10);
     if (!isNaN(numericId)) {
-      try {
-        if (status === 'accepted') {
-          await api.acceptRequest(numericId);
-        } else if (status === 'purchased') {
-          await api.markPurchased(numericId);
-        } else if (status === 'cancelled') {
-          await api.cancelRequest(numericId, extra?.cancellationReason || 'Cancelled by user');
-        } else if (status === 'completed') {
-          const code = extra?.handoverCode;
-          if (code) {
-            await api.confirmHandover(numericId, code);
-          }
+      let updatedRes: any;
+      if (status === 'accepted') {
+        updatedRes = await api.acceptRequest(numericId);
+      } else if (status === 'purchased') {
+        updatedRes = await api.markPurchased(numericId);
+      } else if (status === 'cancelled') {
+        updatedRes = await api.cancelRequest(numericId, extra?.cancellationReason || 'Cancelled by user');
+      } else if (status === 'completed') {
+        const code = extra?.handoverCode;
+        if (code) {
+          updatedRes = await api.confirmHandover(numericId, code);
         }
-      } catch (err) {
-        console.warn(`Backend update status error for ${orderId}:`, err);
       }
-      refreshOrders();
+      const finalStatus = (updatedRes?.status as OrderStatus) || status;
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: finalStatus, ...extra } : o))
+      );
+      await refreshOrders();
+    } else {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status, ...extra } : o))
+      );
     }
   };
 
   const proposePrice = async (orderId: string, itemId: string, price: number, evidencePhotoUrl?: string) => {
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          items: o.items.map((it) =>
+            it.id === itemId
+              ? { ...it, actualPrice: price, evidencePhotoUrl }
+              : it
+          ),
+        };
+      })
+    );
     const numOrderId = parseInt(orderId, 10);
     const numItemId = parseInt(itemId, 10);
     if (!isNaN(numOrderId) && !isNaN(numItemId)) {
-      await api.proposePrice(numOrderId, numItemId, price, evidencePhotoUrl);
+      try {
+        await api.proposePrice(numOrderId, numItemId, price, evidencePhotoUrl);
+      } catch (e) {
+        console.warn('Backend propose price notice:', e);
+      }
       refreshOrders();
     }
   };
@@ -380,9 +455,62 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const rateOrder = async (orderId: string, rating: number, feedback?: string) => {
+    const numOrderId = parseInt(orderId, 10);
+    if (!isNaN(numOrderId)) {
+      try {
+        await api.rateOrder(numOrderId, rating, feedback);
+      } catch (e) {
+        console.warn('Backend rate order notice:', e);
+      }
+      await refreshOrders();
+    }
+  };
+
   const getOrderById = (orderId: string) => orders.find((o) => o.id === orderId);
 
   const getChatByOrderId = (orderId: string) => chats[orderId];
+
+  const fetchMessages = async (orderId: string) => {
+    const numericId = parseInt(orderId, 10);
+    if (isNaN(numericId)) return;
+    try {
+      const serverMsgs = await api.getMessages(numericId);
+      if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+        const mappedMsgs: ChatMessage[] = serverMsgs.map((m: any) => ({
+          id: String(m.id),
+          senderRole: (m.senderRole === 'customer' || m.senderRole === 'helper' ? m.senderRole : 'system'),
+          senderName: m.senderName || (m.senderRole === 'customer' ? 'Customer' : 'Helper'),
+          text: m.text || '',
+          photoUrl: m.photoUrl || undefined,
+          timestamp: m.timestamp
+            ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : 'Just now',
+          isSystemNotice: Boolean(m.isSystemNotice),
+        }));
+
+        setChats((prev) => {
+          const existing = prev[orderId];
+          return {
+            ...prev,
+            [orderId]: {
+              id: `chat-${orderId}`,
+              orderId,
+              counterpartName: existing?.counterpartName || (role === 'customer' ? 'Helper' : 'Customer'),
+              counterpartRole: role === 'customer' ? 'helper' : 'customer',
+              lastMessage: mappedMsgs[mappedMsgs.length - 1]?.text || 'Photo attachment',
+              lastMessageTime: mappedMsgs[mappedMsgs.length - 1]?.timestamp || 'Just now',
+              unreadCount: 0,
+              isReadOnly: existing?.isReadOnly || false,
+              messages: mappedMsgs,
+            },
+          };
+        });
+      }
+    } catch {
+      // Chat messages endpoint may return 404 or empty if not yet initiated
+    }
+  };
 
   const sendMessage = async (orderId: string, text: string, photoUrl?: string) => {
     const newMsg: ChatMessage = {
@@ -417,16 +545,34 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!isNaN(numericId)) {
       try {
         await api.sendMessage(numericId, text, photoUrl);
+        await fetchMessages(orderId);
       } catch (e) {
         console.warn('Backend send message notice:', e);
       }
     }
   };
 
-  const markNotificationRead = (id: string) => {
+  const markNotificationRead = async (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      try {
+        await api.markNotificationRead(numId);
+      } catch (e) {
+        console.warn('Backend mark notification read notice:', e);
+      }
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    try {
+      await api.markAllNotificationsRead();
+    } catch (e) {
+      console.warn('Backend mark all notifications read notice:', e);
+    }
   };
 
   return (
@@ -435,6 +581,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         role,
         setRole,
         currentUser,
+        updateCurrentUser,
         isSuperAdmin,
         authorizedAdminEmails: AUTHORIZED_ADMIN_EMAILS,
         loginAsRole,
@@ -447,9 +594,12 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         getOrderById,
         chats,
         getChatByOrderId,
+        fetchMessages,
         sendMessage,
         notifications,
         markNotificationRead,
+        markAllNotificationsRead,
+        rateOrder,
         proposePrice,
         approvePrices,
         payOrder,

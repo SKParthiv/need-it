@@ -53,18 +53,33 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
   }
 
   const [isLocking, setIsLocking] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
     // Section 10.4: Accept request (lock): card gets teal border, lock icon morphs in, confirms exclusivity
     setIsLocking(true);
-    setTimeout(() => {
-      updateOrderStatus(order.id, 'accepted', {
+    setErrorMsg(null);
+    try {
+      await updateOrderStatus(order.id, 'accepted', {
         helperName: currentUser.name,
         helperId: currentUser.email,
       });
       onAcceptOrder(order.id);
       onNavigate(`/app/helper/jobs/${order.id}`);
-    }, 350);
+    } catch (err: any) {
+      setIsLocking(false);
+      const msg = err?.message || '';
+      if (
+        err?.status === 409 ||
+        msg.includes('409') ||
+        msg.toLowerCase().includes('already taken') ||
+        msg.toLowerCase().includes('conflict')
+      ) {
+        setAlreadyAcceptedByOther(true);
+      } else {
+        setErrorMsg(msg || 'Failed to accept request. Please try again.');
+      }
+    }
   };
 
   return (
@@ -93,6 +108,17 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
             >
               Return to request feed →
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Other error notice (e.g. 403 blocked student) */}
+      {errorMsg && !alreadyAcceptedByOther && (
+        <div className="p-4 rounded-card bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+          <div className="space-y-1">
+            <span className="font-bold block">Could not accept request</span>
+            <p>{errorMsg}</p>
           </div>
         </div>
       )}
@@ -194,23 +220,23 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
           )}
         </div>
 
-        {/* Safety & Honor Reassurance */}
-        <div className="p-3 rounded-card bg-brand-teal-light/40 dark:bg-brand-teal/10 border border-brand-teal/20 text-xs text-brand-teal space-y-1">
+        {/* Safety Reassurance */}
+        <div className="p-3.5 rounded-card bg-brand-teal-light/40 dark:bg-brand-teal/10 border border-brand-teal/20 text-xs text-brand-teal space-y-1">
           <div className="flex items-center gap-1.5 font-bold">
             <ShieldCheck className="w-4 h-4" />
-            <span>Zero Cash Fronting Guarantee</span>
+            <span>Safe Payment Guarantee</span>
           </div>
           <p className="text-neutral-secondary">
-            You will send the store’s QR code in chat; the requester pays the cashier directly before you leave the shop.
+            The customer pays you via UPI before you purchase anything at the shop. You never have to spend your own money.
           </p>
         </div>
       </div>
 
-      {/* Sticky Bottom Action Bar per Section 6.3 & 7.2 */}
+      {/* Sticky Bottom Action Bar */}
       <div className="fixed bottom-0 inset-x-0 z-[200] p-4 bg-white/95 dark:bg-neutral-dark-card/95 backdrop-blur-md border-t border-neutral-border dark:border-neutral-dark-border shadow-e3">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <div className="hidden xs:block">
-            <span className="text-[11px] text-neutral-secondary block">Helper Earnings</span>
+            <span className="text-[11px] text-neutral-secondary block">Your Delivery Earnings</span>
             <span className="font-heading font-extrabold text-xl font-mono text-brand-teal">
               ₹{order.helperFee}
             </span>
@@ -218,15 +244,21 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
 
           <button
             onClick={handleAccept}
-            disabled={isLocking}
+            disabled={isLocking || alreadyAcceptedByOther}
             className={`flex-1 sm:flex-initial sm:min-w-[280px] h-12 px-6 rounded-btn text-white font-heading font-bold text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 ${
-              isLocking
-                ? 'bg-brand-teal-dark scale-[0.98]'
+              isLocking || alreadyAcceptedByOther
+                ? 'bg-neutral-muted cursor-not-allowed text-neutral-secondary'
                 : 'bg-brand-teal hover:bg-brand-teal-dark'
             }`}
           >
             <Lock className={`w-4 h-4 ${isLocking ? 'animate-lock-morph text-emerald-300' : ''}`} />
-            <span>{isLocking ? 'Locking Request Exclusively...' : 'Accept Request (Locks It)'}</span>
+            <span>
+              {isLocking
+                ? 'Accepting Order...'
+                : alreadyAcceptedByOther
+                ? 'Already Accepted by Peer'
+                : 'Accept Order'}
+            </span>
           </button>
         </div>
       </div>

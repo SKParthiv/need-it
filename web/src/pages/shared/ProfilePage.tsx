@@ -9,12 +9,16 @@ import {
   CheckCircle2,
   Bell,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  QrCode
 } from 'lucide-react';
 import { VerifiedBadge } from '../../components/common/VerifiedBadge';
 import { campusPickupPoints, sastraHostels } from '../../data/mockData';
 import { UserRole } from '../../types';
 import { useWebApp, SUPER_ADMIN_EMAIL } from '../../context/WebAppContext';
+import { api } from '../../services/api';
 
 interface ProfilePageProps {
   role: UserRole;
@@ -27,24 +31,60 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onNavigate,
   onLogout
 }) => {
-  const { currentUser, role, loginAsRole, isSuperAdmin } = useWebApp();
+  const { currentUser, role, loginAsRole, isSuperAdmin, updateCurrentUser } = useWebApp();
 
   const [name, setName] = useState(currentUser.name);
   const [hostel, setHostel] = useState(currentUser.hostel);
   const [pickupPoint, setPickupPoint] = useState(currentUser.pickupPoint);
+  const [upiId, setUpiId] = useState(currentUser.upiId || '');
   const [contactPref, setContactPref] = useState('In-app chat only (masked numbers)');
   const [savedNotice, setSavedNotice] = useState(false);
+  const [upiError, setUpiError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setName(currentUser.name);
     setHostel(currentUser.hostel);
     setPickupPoint(currentUser.pickupPoint);
+    setUpiId(currentUser.upiId || '');
   }, [currentUser]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 2500);
+    setUpiError('');
+    setSaveError('');
+
+    // UPI format validation per PRD §7 / Backend RegexValidator
+    const trimmedUpi = upiId.trim();
+    if (trimmedUpi) {
+      const upiRegex = /^[\w.\-]{2,64}@[a-zA-Z][a-zA-Z0-9]{1,30}$/;
+      if (!upiRegex.test(trimmedUpi)) {
+        setUpiError('Enter a valid UPI ID (e.g. name@okhdfcbank, 9876543210@paytm).');
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      await api.updateMe({
+        upi_id: trimmedUpi,
+        hostel_block: hostel,
+        pickup_point: pickupPoint,
+      });
+      updateCurrentUser({
+        name,
+        hostel,
+        pickupPoint,
+        upiId: trimmedUpi,
+      });
+      setSavedNotice(true);
+      setTimeout(() => setSavedNotice(false), 3000);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Could not save profile changes.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const initials =
@@ -155,8 +195,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
         {savedNotice && (
           <div className="p-3.5 rounded-card bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>Profile settings saved successfully!</span>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="p-3.5 rounded-card bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{saveError}</span>
           </div>
         )}
 
@@ -213,6 +260,42 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </select>
           </div>
 
+          {/* Helper UPI ID Configuration (PRD §7 / Issue #30 req 5 / Issue #28 req 7) */}
+          <div className="p-3.5 rounded-card bg-neutral-surface-alt/70 dark:bg-slate-800/70 border border-neutral-border dark:border-slate-700 space-y-1.5">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5 text-brand-teal" />
+                <span>Helper UPI Address / VPA (Payout Handle)</span>
+              </label>
+              {role === 'helper' && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-brand-teal-light text-brand-teal uppercase">
+                  Payout Destination
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              value={upiId}
+              onChange={(e) => {
+                setUpiId(e.target.value);
+                setUpiError('');
+              }}
+              placeholder="e.g. yourname@okhdfcbank or 9876543210@paytm"
+              className={`w-full h-11 px-3 rounded-input bg-white dark:bg-slate-900 border text-sm focus:outline-none focus:ring-2 font-mono ${
+                upiError
+                  ? 'border-rose-500 focus:ring-rose-400'
+                  : 'border-neutral-border dark:border-slate-700 focus:ring-brand-teal'
+              }`}
+            />
+            {upiError ? (
+              <p className="text-xs text-rose-600 font-medium">{upiError}</p>
+            ) : (
+              <p className="text-[11px] text-neutral-secondary">
+                Direct peer-to-peer settlement. Requesters will scan this QR or pay this address directly during shop checkout.
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="block font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
               Contact & Notification Preference
@@ -230,9 +313,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
           <button
             type="submit"
-            className="w-full h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-medium text-xs shadow-sm transition-colors"
+            disabled={isSaving}
+            className="w-full h-11 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-medium text-xs shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            Save Changes
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving Profile...</span>
+              </>
+            ) : (
+              <span>Save Changes</span>
+            )}
           </button>
         </form>
 

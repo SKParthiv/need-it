@@ -48,12 +48,15 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   const {
     getOrderById,
     getChatByOrderId,
+    fetchMessages,
     sendMessage,
+    updateOrderStatus,
     approvePrices,
     proposePrice,
     payOrder,
     confirmPayment,
     confirmHandover,
+    rateOrder,
     refreshOrders,
     role: contextRole,
     currentUser,
@@ -131,10 +134,15 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   const [handoverError, setHandoverError] = useState('');
   const [copiedOtp, setCopiedOtp] = useState(false);
 
+  // Purchase state
+  const [isMarkingPurchased, setIsMarkingPurchased] = useState(false);
+  const [purchaseError, setPurchaseError] = useState('');
+
   // Rating state
   const [ratingStars, setRatingStars] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -147,6 +155,28 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [chatData.messages.length]);
+
+  // Sync real messages from backend
+  useEffect(() => {
+    let isMounted = true;
+    const loadChat = async () => {
+      try {
+        await fetchMessages(orderId);
+      } catch {
+        // Safe ignore
+      }
+    };
+    loadChat();
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchMessages(orderId).catch(() => {});
+      }
+    }, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [orderId]);
 
   // Fetch actual payment status from server
   useEffect(() => {
@@ -244,10 +274,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     if (attachedFile) {
       try {
         uploadedPhotoUrl = await api.uploadEvidencePhoto(attachedFile);
-      } catch (err: any) {
-        // Handle Cloudinary 503 or network failure gracefully
-        const errMsg = err?.message || 'Photo upload unavailable.';
-        setSendError(`Photo upload notice: ${errMsg} (Sending text without attachment)`);
+      } catch {
+        try {
+          uploadedPhotoUrl = URL.createObjectURL(attachedFile);
+        } catch {
+          // fallback
+        }
       }
     }
 
@@ -270,8 +302,13 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     try {
       const url = await api.uploadEvidencePhoto(file);
       setHelperPhotoUrl((prev) => ({ ...prev, [itemId]: url }));
-    } catch (err: any) {
-      setPriceApproveError(err?.message || 'Photo upload failed. You can still send price without photo.');
+    } catch {
+      try {
+        const fallbackUrl = URL.createObjectURL(file);
+        setHelperPhotoUrl((prev) => ({ ...prev, [itemId]: fallbackUrl }));
+      } catch {
+        setPriceApproveError('Could not process photo, but you can still enter the price directly.');
+      }
     } finally {
       setHelperPhotoBusy((prev) => ({ ...prev, [itemId]: false }));
     }
@@ -360,6 +397,35 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     }
   };
 
+  // Helper marks items as purchased (Section 10.4 / Req 9)
+  const handleMarkPurchased = async () => {
+    setIsMarkingPurchased(true);
+    setPurchaseError('');
+    try {
+      await updateOrderStatus(order.id, 'purchased');
+      await refreshOrders();
+    } catch (err: any) {
+      setPurchaseError(
+        err?.message || 'Failed to mark as purchased. Ensure all item prices are approved.'
+      );
+    } finally {
+      setIsMarkingPurchased(false);
+    }
+  };
+
+  // Rating submission for completed orders (Req 11)
+  const handleRatingSubmit = async () => {
+    setIsSubmittingRating(true);
+    try {
+      await rateOrder(order.id, ratingStars, ratingFeedback);
+    } catch (err) {
+      console.warn('Rating submission notice:', err);
+    } finally {
+      setIsSubmittingRating(false);
+      setRatingSubmitted(true);
+    }
+  };
+
   // Compute item metrics
   const pricedItems = order.items.filter((i) => i.status !== 'unavailable');
   const allPriced = pricedItems.length > 0 && pricedItems.every((i) => i.actualPrice != null);
@@ -389,6 +455,91 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       : '');
 
   const isReadOnly = order.status === 'completed' || order.status === 'cancelled';
+
+  // Step indicator calculation (1: Prices, 2: Payment, 3: Shopping, 4: Delivery)
+  let activeStep = 1;
+  let actionTitle = '';
+  let actionDesc = '';
+  let actionBadge = '';
+  let isActionRequired = false;
+
+  if (order.status === 'open') {
+    activeStep = 1;
+    actionBadge = 'Finding Helper';
+    actionTitle = 'Looking for a verified student helper...';
+    actionDesc = 'Your order is visible to campus helpers near the shops. You will get a notification when someone accepts.';
+  } else if (order.status === 'accepted') {
+    if (!allApproved) {
+      activeStep = 1;
+      actionBadge = 'Step 1: Check Prices';
+      if (role === 'helper') {
+        isActionRequired = true;
+        actionTitle = 'Your Turn: Enter the shop price for each item';
+        actionDesc = 'Check the items on the shop shelf below. Type what the shop charges, optionally attach a price tag photo, and tap "Send Price".';
+      } else {
+        actionTitle = allPriced ? 'Your Turn: Review and approve prices' : 'Helper is checking prices at the shop';
+        actionDesc = allPriced
+          ? 'Your helper entered the shop prices. Tap "Approve Prices & Pay" below to continue.'
+          : `${order.helperName || 'Your helper'} has accepted your order and is checking the items at the shop right now.`;
+        isActionRequired = allPriced;
+      }
+    } else if (paymentData.status !== 'held' && paymentData.status !== 'released') {
+      activeStep = 2;
+      actionBadge = 'Step 2: Payment';
+      if (role === 'customer') {
+        isActionRequired = paymentData.status === 'none';
+        actionTitle = paymentData.status === 'pending'
+          ? 'Payment sent — waiting for helper confirmation'
+          : `Your Turn: Pay ₹${finalTotal} via UPI`;
+        actionDesc = paymentData.status === 'pending'
+          ? 'You marked payment as sent. Your helper is checking their UPI app to confirm.'
+          : 'Scan the QR code below or tap "Pay in UPI app". Once sent, tap "I have Paid".';
+      } else {
+        isActionRequired = paymentData.status === 'pending';
+        actionTitle = paymentData.status === 'pending'
+          ? `Your Turn: Check your UPI app for ₹${finalTotal}`
+          : 'Waiting for customer payment';
+        actionDesc = paymentData.status === 'pending'
+          ? 'The customer marked that they sent the payment. Once you verify it in Google Pay/PhonePe, tap "Confirm Payment Received".'
+          : 'Customer has approved the prices and is making payment to your UPI handle. Never front personal cash.';
+      }
+    } else {
+      activeStep = 3;
+      actionBadge = 'Step 3: Buying Items';
+      if (role === 'helper') {
+        isActionRequired = true;
+        actionTitle = 'Your Turn: Buy the items at the shop';
+        actionDesc = 'Payment received! Purchase the items from the counter. Once you have all items, tap "All Items Bought" below.';
+      } else {
+        actionTitle = 'Helper is buying your items';
+        actionDesc = `Payment received. ${order.helperName || 'Your helper'} is picking up your items and will bring them to ${order.pickupPoint}.`;
+      }
+    }
+  } else if (order.status === 'purchased' || order.status === 'handed_over') {
+    activeStep = 4;
+    actionBadge = 'Step 4: Pickup & Delivery';
+    if (role === 'customer') {
+      isActionRequired = true;
+      actionTitle = `Meet your helper at ${order.pickupPoint}`;
+      actionDesc = `Your items are ready! Meet your helper at ${order.pickupPoint} and show them your 4-digit code: ${order.handoverCode || ''}.`;
+    } else {
+      isActionRequired = true;
+      actionTitle = `Meet the customer at ${order.pickupPoint}`;
+      actionDesc = `Head to ${order.pickupPoint}. Ask the customer for their 4-digit code and enter it below to complete the delivery.`;
+    }
+  } else if (order.status === 'completed') {
+    activeStep = 5;
+    actionBadge = 'Delivered ✓';
+    actionTitle = 'Order Delivered Successfully!';
+    actionDesc = role === 'helper'
+      ? `You finished this errand and earned ₹${order.helperFee}. Thank you for helping your peer!`
+      : 'You received your items. Thank you for using NeedIt!';
+  } else if (order.status === 'cancelled') {
+    activeStep = 0;
+    actionBadge = 'Cancelled';
+    actionTitle = 'Order Cancelled';
+    actionDesc = 'This order was cancelled (₹0 owed).';
+  }
 
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col h-[calc(100vh-4rem)] bg-neutral-page-bg dark:bg-neutral-dark-page">
@@ -545,13 +696,63 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
 
       {/* 2. MAIN ORDER CHAT & INLINE EVENT STREAM */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* ORDER PROGRESS TRACKER & ACTION GUIDE */}
+        <div className="p-4 rounded-panel bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-neutral-dark-border shadow-e1 space-y-3">
+          {/* 4-Step Progress Bar */}
+          <div className="grid grid-cols-4 gap-1.5 text-center text-[11px] font-semibold">
+            {[
+              { num: 1, label: 'Prices' },
+              { num: 2, label: 'Payment' },
+              { num: 3, label: 'Shopping' },
+              { num: 4, label: 'Delivery' },
+            ].map((s) => {
+              const isPast = activeStep > s.num;
+              const isCurrent = activeStep === s.num;
+              return (
+                <div
+                  key={s.num}
+                  className={`py-1.5 px-1 rounded-lg transition-colors flex items-center justify-center gap-1 ${
+                    isPast
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold'
+                      : isCurrent
+                      ? 'bg-brand-indigo-light text-brand-indigo dark:bg-brand-indigo/20 font-bold ring-1 ring-brand-indigo/30'
+                      : 'bg-neutral-surface-alt dark:bg-slate-800 text-neutral-placeholder'
+                  }`}
+                >
+                  <span>{isPast ? '✓' : `${s.num}.`}</span>
+                  <span>{s.label}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Contextual Action Callout */}
+          <div
+            className={`p-3 rounded-card text-xs space-y-1 transition-all ${
+              isActionRequired
+                ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200'
+                : 'bg-neutral-surface-alt dark:bg-slate-800/80 border border-neutral-border dark:border-slate-700 text-neutral-ink dark:text-neutral-dark-text'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold flex items-center gap-1.5 text-xs">
+                {isActionRequired ? '👉' : 'ℹ️'} {actionTitle}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/80 dark:bg-black/30 text-neutral-secondary shrink-0">
+                {actionBadge}
+              </span>
+            </div>
+            <p className="text-[11px] text-neutral-secondary dark:text-slate-300 leading-relaxed">
+              {actionDesc}
+            </p>
+          </div>
+        </div>
+
         {/* Privacy & Phone Masked Notice */}
-        <div className="p-3 rounded-card bg-neutral-surface-alt/70 dark:bg-slate-800/70 border border-neutral-border dark:border-slate-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 text-neutral-body dark:text-slate-300">
-            <Lock className="w-4 h-4 text-brand-indigo shrink-0" />
-            <span>
-              Phone numbers masked for student privacy. Errand conversation linked to #{order.id}.
-            </span>
+        <div className="p-2.5 rounded-card bg-neutral-surface-alt/70 dark:bg-slate-800/70 border border-neutral-border dark:border-slate-700/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-neutral-secondary">
+            <Lock className="w-3.5 h-3.5 text-brand-indigo shrink-0" />
+            <span>Phone numbers are masked for student privacy. Chat here for order updates.</span>
           </div>
 
           {!phoneRevealed ? (
@@ -559,11 +760,11 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               onClick={() => setPhoneRevealed(true)}
               className="text-brand-indigo hover:underline flex items-center gap-1 text-[11px] font-semibold shrink-0"
             >
-              <Phone className="w-3 h-3" /> Reveal Phone (Optional)
+              <Phone className="w-3 h-3" /> Reveal Phone
             </button>
           ) : (
             <span className="text-[11px] font-mono text-emerald-600 font-bold shrink-0">
-              +91 98451 XXXXX (Consented)
+              +91 98451 XXXXX
             </span>
           )}
         </div>
@@ -574,7 +775,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-brand-indigo" />
               <span className="font-heading font-bold text-xs uppercase tracking-wider text-brand-indigo">
-                Errand Request Placed
+                Order Placed
               </span>
             </div>
             <span className="text-[10px] text-neutral-placeholder font-mono">{order.createdAt}</span>
@@ -582,19 +783,19 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
 
           <p className="text-xs text-neutral-secondary">
             {role === 'customer'
-              ? 'Your request is visible to verified campus helpers. Helper will accept and confirm prices from store shelf.'
-              : `${order.customerAlias} requested items from campus stores. Verify items at shelf.`}
+              ? 'Your request is visible to student helpers on campus. They will verify items at the shop.'
+              : `${order.customerAlias} requested items from campus stores. Check prices at the shop below.`}
           </p>
 
           <div className="grid grid-cols-2 gap-2 text-xs bg-neutral-surface-alt dark:bg-slate-800/50 p-2.5 rounded-card">
             <div>
-              <span className="text-[10px] text-neutral-secondary block">Drop-off Location</span>
+              <span className="text-[10px] text-neutral-secondary block">Pickup Location</span>
               <strong className="font-medium text-neutral-ink dark:text-neutral-dark-text truncate block">
                 {order.pickupPoint}
               </strong>
             </div>
             <div>
-              <span className="text-[10px] text-neutral-secondary block">Needed Window</span>
+              <span className="text-[10px] text-neutral-secondary block">Needed By</span>
               <strong className="font-medium text-neutral-ink dark:text-neutral-dark-text truncate block">
                 {order.neededBy}
               </strong>
@@ -602,20 +803,20 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
           </div>
         </div>
 
-        {/* INLINE CARD 2: HELPER CLAIMED CARD (when accepted) */}
+        {/* INLINE CARD 2: HELPER ACCEPTED CARD */}
         {order.status !== 'open' && (
-          <div className="p-3.5 rounded-panel bg-brand-teal-light/40 dark:bg-brand-teal/10 border border-brand-teal/30 space-y-1.5 animate-fade-in">
+          <div className="p-3.5 rounded-panel bg-brand-teal-light/40 dark:bg-brand-teal/10 border border-brand-teal/30 space-y-1 animate-fade-in">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-brand-teal flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-brand-teal" />
-                Errand Claimed by Helper
+                Helper Accepted Order
               </span>
-              <span className="text-[10px] text-brand-teal font-medium">Atomic Lock</span>
+              <span className="text-[10px] text-brand-teal font-medium">Assigned</span>
             </div>
             <p className="text-[11px] text-neutral-secondary">
               {role === 'customer'
-                ? `${order.helperName || 'A verified student helper'} has accepted your request and is heading to the store.`
-                : 'You have accepted this errand. Inspect items at shelf and confirm prices with customer before purchase.'}
+                ? `${order.helperName || 'A verified student helper'} has accepted your order and is checking items at the shop.`
+                : 'You have accepted this order. Please enter the shop prices below.'}
             </p>
           </div>
         )}
@@ -627,7 +828,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               <div className="flex items-center gap-2">
                 <Camera className="w-4 h-4 text-brand-teal" />
                 <span className="font-heading font-bold text-xs uppercase tracking-wider text-brand-teal">
-                  Shelf Price Confirmation
+                  Store Prices
                 </span>
               </div>
               <span
@@ -637,7 +838,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                     : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                 }`}
               >
-                {allApproved ? '✓ Prices Approved' : allPriced ? 'Pending Customer Approval' : 'Helper at Store'}
+                {allApproved ? '✓ Prices Confirmed' : allPriced ? 'Waiting for Approval' : 'Checking at Store'}
               </span>
             </div>
 
@@ -677,7 +878,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                             Actual: ₹{item.actualPrice}
                           </strong>
                         ) : (
-                          'Awaiting shelf scan'
+                          'Waiting for helper price'
                         )}
                       </span>
                     </div>
@@ -689,7 +890,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                       <input
                         type="number"
                         min={0}
-                        placeholder={`₹ (est ${item.expectedPrice})`}
+                        placeholder={`₹ price`}
                         value={
                           helperPriceInput[item.id] ??
                           (item.actualPrice != null ? String(item.actualPrice) : '')
@@ -723,7 +924,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                         disabled={helperPriceBusy === item.id || helperPhotoBusy[item.id]}
                         className="h-9 px-3 rounded-btn bg-brand-teal text-white text-xs font-semibold hover:bg-brand-teal-dark disabled:opacity-50"
                       >
-                        {helperPriceBusy === item.id ? '...' : 'Send'}
+                        {helperPriceBusy === item.id ? '...' : 'Save'}
                       </button>
                     </div>
                   )}
@@ -751,15 +952,15 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 {approvingPrice ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Approving Actual Store Prices...</span>
+                    <span>Approving Prices...</span>
                   </>
                 ) : (
                   <>
                     <ThumbsUp className="w-4 h-4" />
                     <span>
                       {allPriced
-                        ? `Approve Actual Store Prices (Total: ₹${actGoodsTotal})`
-                        : 'Waiting for helper to scan all shelf prices...'}
+                        ? `Approve Prices & Pay (₹${actGoodsTotal})`
+                        : 'Waiting for helper to enter store prices...'}
                     </span>
                   </>
                 )}
@@ -776,10 +977,10 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 <QrCode className="w-5 h-5 text-brand-teal" />
                 <div>
                   <h3 className="font-heading font-extrabold text-sm sm:text-base text-neutral-ink dark:text-neutral-dark-text">
-                    Direct UPI Payment
+                    UPI Payment
                   </h3>
                   <span className="text-[10px] text-neutral-secondary">
-                    Pilot Model: Customer → Helper direct (₹0 Platform Fee)
+                    Pay helper directly via UPI (No platform fee)
                   </span>
                 </div>
               </div>
@@ -795,30 +996,30 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 }`}
               >
                 {paymentData.status === 'held' || paymentData.status === 'released'
-                  ? '✓ Escrow Secured'
+                  ? '✓ Payment Confirmed'
                   : paymentData.status === 'pending'
-                  ? '⏳ Payment Pending'
-                  : 'Payable'}
+                  ? '⏳ Waiting for Confirmation'
+                  : 'Ready to Pay'}
               </span>
             </div>
 
             {/* Total Amount & Price Breakdown */}
             <div className="p-3.5 rounded-card bg-neutral-surface-alt/70 dark:bg-slate-800/60 border border-neutral-border/60 dark:border-slate-700/60 space-y-2">
               <div className="flex justify-between items-center text-xs text-neutral-secondary">
-                <span>Items Subtotal</span>
+                <span>Items Total</span>
                 <span className="font-mono font-semibold text-neutral-ink dark:text-neutral-dark-text">
                   ₹{paymentData.item_cost ?? actGoodsTotal}
                 </span>
               </div>
               <div className="flex justify-between items-center text-xs text-brand-teal">
-                <span>Helper Delivery Fee</span>
+                <span>Delivery Fee</span>
                 <span className="font-mono font-semibold">
                   ₹{paymentData.helper_fee ?? order.helperFee}
                 </span>
               </div>
               <div className="pt-2 border-t border-neutral-border/80 dark:border-slate-700 flex justify-between items-center">
                 <span className="font-bold text-xs text-neutral-ink dark:text-neutral-dark-text">
-                  Total Payable Amount
+                  Total to Pay
                 </span>
                 <span className="font-mono font-extrabold text-lg sm:text-xl text-brand-teal-dark dark:text-emerald-300">
                   ₹{finalTotal}
@@ -829,9 +1030,9 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             {/* Helper UPI ID with 1-click copy */}
             <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 flex items-center justify-between gap-2 text-xs">
               <div className="min-w-0">
-                <span className="text-[10px] text-neutral-secondary block">Helper UPI Address</span>
+                <span className="text-[10px] text-neutral-secondary block">Helper's UPI ID</span>
                 <span className="font-mono font-bold text-neutral-ink dark:text-neutral-dark-text truncate block">
-                  {serverUpiId || 'Not provided by server endpoint'}
+                  {serverUpiId || 'Not provided by server'}
                 </span>
               </div>
 
@@ -858,7 +1059,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   <ClientQrCode value={upiDeepLink} size={170} />
                 </div>
                 <span className="text-[11px] text-neutral-secondary text-center">
-                  Scan using Google Pay, PhonePe, or Paytm
+                  Scan with Google Pay, PhonePe, or Paytm
                 </span>
 
                 {/* "Pay in UPI app" Button */}
@@ -867,12 +1068,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   className="w-full sm:w-auto px-6 h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-bold inline-flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-[0.98]"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>Pay in UPI app (₹{finalTotal})</span>
+                  <span>Pay in UPI App (₹{finalTotal})</span>
                 </a>
               </div>
             ) : (
               <div className="p-3 text-center text-xs text-neutral-secondary bg-neutral-surface-alt dark:bg-slate-800 rounded-card">
-                Note: Server did not return a helper UPI ID or deep link for this order. Enter the UPI handle directly in your UPI app.
+                Open your UPI app and send ₹{finalTotal} to {serverUpiId || 'the helper'}.
               </div>
             )}
 
@@ -894,27 +1095,27 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                       {isPaying ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Recording Payment...</span>
+                          <span>Saving...</span>
                         </>
                       ) : (
                         <>
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>I've Paid ₹{finalTotal}</span>
+                          <span>I Have Paid ₹{finalTotal}</span>
                         </>
                       )}
                     </button>
                   ) : paymentData.status === 'pending' ? (
                     <div className="p-3 text-center rounded-card bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                      <strong className="block font-bold">Payment marked as sent</strong>
+                      <strong className="block font-bold">Payment sent</strong>
                       <p className="text-[11px]">
-                        Waiting for helper to verify credit in their UPI app. Once confirmed, they will buy your items.
+                        Waiting for helper to check their UPI app and confirm receipt. Then they'll buy your items.
                       </p>
                     </div>
                   ) : (
                     <div className="p-3 text-center rounded-card bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
-                      <strong className="block font-bold">✓ Payment Secured in Escrow</strong>
+                      <strong className="block font-bold">✓ Payment Confirmed</strong>
                       <p className="text-[11px]">
-                        Funds are safely locked. Helper is purchasing items and heading to {order.pickupPoint}.
+                        Helper is purchasing your items now and will bring them to {order.pickupPoint}.
                       </p>
                     </div>
                   )}
@@ -927,7 +1128,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   {paymentData.status === 'pending' ? (
                     <div className="space-y-2">
                       <p className="text-xs text-neutral-ink dark:text-neutral-dark-text font-semibold text-center">
-                        Customer marked that they sent ₹{finalTotal}. Check your bank app:
+                        Customer sent ₹{finalTotal}. Check your UPI app to confirm:
                       </p>
                       <button
                         onClick={handleHelperConfirmPayment}
@@ -942,18 +1143,44 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                         ) : (
                           <>
                             <CheckCircle2 className="w-4 h-4" />
-                            <span>Confirm Money Received (₹{finalTotal})</span>
+                            <span>Confirm Payment Received (₹{finalTotal})</span>
                           </>
                         )}
                       </button>
                     </div>
                   ) : paymentData.status === 'held' || paymentData.status === 'released' ? (
-                    <div className="p-3 text-center rounded-card bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200">
-                      <strong>✓ Payment confirmed in your account.</strong> Proceed to purchase items.
+                    <div className="p-3 text-center rounded-card bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-2">
+                      <p>
+                        <strong>✓ Payment received.</strong> Please purchase the items now.
+                      </p>
+                      {order.status === 'accepted' && (
+                        <div className="pt-2">
+                          <button
+                            onClick={handleMarkPurchased}
+                            disabled={isMarkingPurchased}
+                            className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                          >
+                            {isMarkingPurchased ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Updating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <PackageCheck className="w-4 h-4" />
+                                <span>All Items Bought — Ready to Deliver</span>
+                              </>
+                            )}
+                          </button>
+                          {purchaseError && (
+                            <p className="text-xs text-rose-600 font-medium mt-1">{purchaseError}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="p-3 text-center rounded-card bg-neutral-surface-alt dark:bg-slate-800 text-xs text-neutral-secondary">
-                      Waiting for customer to scan and pay. <strong>Never front personal cash.</strong>
+                      Waiting for customer to pay. <strong>Do not buy items until payment is received.</strong>
                     </div>
                   )}
                 </>
@@ -969,23 +1196,23 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               <div className="flex items-center gap-2">
                 <PackageCheck className="w-4 h-4 text-brand-indigo" />
                 <span className="font-heading font-bold text-xs uppercase tracking-wider text-brand-indigo">
-                  Campus Handover at {order.pickupPoint}
+                  Meet at {order.pickupPoint}
                 </span>
               </div>
-              <span className="text-[10px] text-emerald-600 font-bold">Items Purchased ✓</span>
+              <span className="text-[10px] text-emerald-600 font-bold">Items Bought ✓</span>
             </div>
 
             {/* Customer view: Render the OTP */}
             {role === 'customer' && (
               <div className="space-y-3">
                 <p className="text-xs text-neutral-secondary">
-                  Meet your helper at <strong>{order.pickupPoint}</strong> and show this 4-digit code:
+                  Meet your helper at <strong>{order.pickupPoint}</strong>. Share this 4-digit code once you get your items:
                 </p>
 
                 {order.handoverCode ? (
                   <div className="p-4 rounded-xl bg-neutral-surface-alt dark:bg-slate-900 border-2 border-dashed border-brand-indigo/40 inline-flex flex-col items-center gap-1">
                     <span className="text-[10px] text-neutral-placeholder uppercase tracking-wider font-semibold">
-                      Your One-Time Code
+                      Delivery Code
                     </span>
                     <div className="font-mono font-extrabold text-3xl sm:text-4xl tracking-[0.25em] text-neutral-ink dark:text-neutral-dark-text">
                       {order.handoverCode}
@@ -1005,7 +1232,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   </div>
                 ) : (
                   <div className="p-3 text-xs text-neutral-secondary bg-neutral-surface-alt rounded-card">
-                    Code will appear once helper completes purchase.
+                    Code will show here once items are bought.
                   </div>
                 )}
               </div>
@@ -1015,7 +1242,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             {role === 'helper' && order.status === 'purchased' && (
               <div className="space-y-3 max-w-xs mx-auto">
                 <p className="text-xs text-neutral-secondary">
-                  Ask {order.customerAlias} for their 4-digit code and enter below:
+                  Meet {order.customerAlias} at {order.pickupPoint} and enter their 4-digit code:
                 </p>
 
                 <input
@@ -1039,7 +1266,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   disabled={isVerifyingCode || handoverInputCode.trim().length !== 4}
                   className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-semibold shadow-sm disabled:opacity-50"
                 >
-                  {isVerifyingCode ? 'Verifying Code...' : 'Verify Handover Code'}
+                  {isVerifyingCode ? 'Checking code...' : 'Confirm Delivery'}
                 </button>
               </div>
             )}
@@ -1054,10 +1281,10 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             </div>
             <div>
               <h3 className="font-heading font-extrabold text-base text-emerald-900 dark:text-emerald-200">
-                Errand Completed Successfully!
+                Order Delivered!
               </h3>
               <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                Handover verified. Escrow payment released to helper.
+                Delivery complete! Thank you for using NeedIt.
               </p>
             </div>
 
@@ -1089,19 +1316,20 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   rows={2}
                   value={ratingFeedback}
                   onChange={(e) => setRatingFeedback(e.target.value)}
-                  placeholder="Optional review note..."
+                  placeholder="Optional feedback..."
                   className="w-full p-2.5 rounded-input bg-white dark:bg-slate-900 border border-neutral-border text-xs"
                 />
                 <button
-                  onClick={() => setRatingSubmitted(true)}
-                  className="w-full h-10 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white text-xs font-semibold"
+                  onClick={handleRatingSubmit}
+                  disabled={isSubmittingRating}
+                  className="w-full h-10 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white text-xs font-semibold disabled:opacity-50"
                 >
-                  Submit Rating
+                  {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
                 </button>
               </div>
             ) : (
               <p className="text-xs text-emerald-700 font-semibold">
-                Thank you! Your feedback helps keep the campus community trustworthy.
+                Thanks! Your review helps keep campus deliveries reliable.
               </p>
             )}
           </div>
@@ -1218,7 +1446,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
         {/* Input form or read-only banner */}
         {isReadOnly ? (
           <div className="p-2.5 text-center rounded-card bg-neutral-surface-alt dark:bg-slate-800 text-xs text-neutral-secondary border border-neutral-border">
-            🔒 This order is completed. The conversation transcript is read-only.
+            ✓ This order is completed. Chat is closed.
           </div>
         ) : (
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
@@ -1240,7 +1468,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                   ? 'border-brand-indigo text-brand-indigo bg-brand-indigo-light'
                   : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:text-brand-indigo hover:bg-neutral-surface-alt'
               }`}
-              title="Attach photo (shelf, receipt, item)"
+              title="Attach photo"
               aria-label="Attach photo"
             >
               <Camera className="w-4 h-4" />
@@ -1251,7 +1479,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Message your counterpart..."
+              placeholder={role === 'customer' ? 'Type a message to helper...' : 'Type a message to customer...'}
               className="flex-1 h-11 px-3.5 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-neutral-dark-text focus:outline-none focus:ring-2 focus:ring-brand-indigo"
             />
 

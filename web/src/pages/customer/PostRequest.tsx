@@ -864,7 +864,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                     Estimated Items Total:
                   </span>
                   <span className="text-[11px] text-neutral-placeholder font-sans">
-                    (Paid direct to cashier via UPI QR)
+                    (Direct UPI payment once store prices are confirmed)
                   </span>
                 </div>
                 <span className="font-heading font-extrabold text-2xl text-brand-indigo">
@@ -877,10 +877,10 @@ export const PostRequest: React.FC<PostRequestProps> = ({
             <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-800/30 text-xs space-y-2">
               <div className="flex items-center gap-1.5 font-bold text-brand-indigo">
                 <ShieldCheck className="w-4 h-4" />
-                <span>Zero Platform Fee • Direct Student Handover</span>
+                <span>No Platform Fees • Direct UPI Payment</span>
               </div>
               <p className="text-[11px] text-neutral-secondary dark:text-slate-400 leading-relaxed">
-                Helper fee (₹20–₹50) is set and paid directly to your helper via UPI once actual item prices and shelf photo evidence are approved in chat. The platform takes zero cut.
+                You'll pay your helper directly via UPI once store prices are confirmed in the order chat. NeedIt takes ₹0 platform fee.
               </p>
             </div>
 
@@ -901,7 +901,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                 onClick={handleSubmitOrder}
                 className="h-12 px-7 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
               >
-                <span>Confirm & Post Errand →</span>
+                <span>Confirm & Post Order →</span>
               </button>
             </div>
           </div>

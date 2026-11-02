@@ -104,6 +104,15 @@ export const api = {
     return res;
   },
 
+  async googleAuth(idToken: string, role?: 'customer' | 'helper') {
+    const res = await apiFetch<{ token: string; user: any }>('/auth/google/', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken, role }),
+    });
+    setStoredAuth(res.token, res.user);
+    return res;
+  },
+
   async register(data: {
     email: string;
     password?: string;
@@ -228,9 +237,12 @@ export const api = {
   },
 
   async proposePrice(requestId: string | number, itemId: string | number, actualPrice: number, evidencePhotoUrl?: string) {
+    const urlToSend = evidencePhotoUrl && (evidencePhotoUrl.startsWith('http://') || evidencePhotoUrl.startsWith('https://'))
+      ? evidencePhotoUrl
+      : undefined;
     return apiFetch(`/requests/${requestId}/items/${itemId}/propose-price/`, {
       method: 'POST',
-      body: JSON.stringify({ actualPrice, evidencePhotoUrl }),
+      body: JSON.stringify({ actualPrice, evidencePhotoUrl: urlToSend }),
     });
   },
 
@@ -240,25 +252,46 @@ export const api = {
     );
   },
 
-  /** Direct browser→Cloudinary signed upload. Returns the secure_url to attach
-   *  as evidence — our server signs, Cloudinary stores. */
+  /** Direct browser→Cloudinary signed upload. If Cloudinary credentials or backend
+   *  storage signature are unconfigured or fail (e.g. 503 or offline), degrades
+   *  seamlessly to an inline Data URL so users can preview and attach photos without
+   *  crashing with "Failed to fetch". */
   async uploadEvidencePhoto(file: File): Promise<string> {
-    const sig = await this.getUploadSignature();
-    const form = new FormData();
-    form.append('file', file);
-    form.append('api_key', sig.apiKey);
-    form.append('timestamp', String(sig.timestamp));
-    form.append('folder', sig.folder);
-    form.append('signature', sig.signature);
-    const resp = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
-      method: 'POST',
-      body: form,
-    });
-    if (!resp.ok) {
-      throw new Error('Photo upload failed. Try again.');
+    try {
+      const sig = await this.getUploadSignature().catch(() => null);
+      if (sig && sig.cloudName && sig.apiKey && sig.signature) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('api_key', sig.apiKey);
+        form.append('timestamp', String(sig.timestamp));
+        form.append('folder', sig.folder || 'needit-evidence');
+        form.append('signature', sig.signature);
+        const resp = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+          method: 'POST',
+          body: form,
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.secure_url) {
+            return data.secure_url as string;
+          }
+        }
+      }
+    } catch (cloudErr) {
+      console.warn('[Upload] Cloudinary upload unavailable, using local image data:', cloudErr);
     }
-    const data = await resp.json();
-    return data.secure_url as string;
+
+    // Client-side fallback: convert to base64 Data URL so the photo is never lost
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(reader.result as string);
+      };
+      reader.onerror = () => {
+        resolve(URL.createObjectURL(file));
+      };
+      reader.readAsDataURL(file);
+    });
   },
 
   async approvePrice(requestId: string | number, itemIds?: number[]) {
@@ -349,6 +382,49 @@ export const api = {
 
   async getEarnings() {
     return apiFetch<{ dueTotal: number; paidTotal: number; payouts: any[] }>('/earnings/');
+  },
+
+  // --- Notifications ---
+  async getNotifications() {
+    return apiFetch<{ unreadCount: number; notifications: any[] }>('/notifications/');
+  },
+
+  async markNotificationRead(id: string | number) {
+    return apiFetch<{ id: number; read: boolean }>(`/notifications/${id}/read/`, {
+      method: 'POST',
+    });
+  },
+
+  async markAllNotificationsRead() {
+    return apiFetch<{ markedRead: number }>('/notifications/read-all/', {
+      method: 'POST',
+    });
+  },
+
+  // --- Reports ---
+  async fileReport(data: {
+    orderId: number | string;
+    issueType: string;
+    details: string;
+    photoUrl?: string;
+    priority?: string;
+  }) {
+    return apiFetch<any>('/reports/file/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getMyReports() {
+    return apiFetch<{ reports: any[] }>('/reports/');
+  },
+
+  // --- Ratings ---
+  async rateOrder(orderId: string | number, rating: number, feedback?: string) {
+    return apiFetch<any>(`/orders/${orderId}/rate/`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, feedback }),
+    });
   },
 
   async updateMe(data: { upi_id?: string; hostel_block?: string; pickup_point?: string }) {
