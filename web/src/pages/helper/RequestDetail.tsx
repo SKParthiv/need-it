@@ -5,6 +5,7 @@ import {
   MapPin,
   Clock,
   ShieldCheck,
+  ShieldAlert,
   AlertCircle,
   Lock,
   Package
@@ -52,10 +53,12 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
 
   const [isLocking, setIsLocking] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [blockedError, setBlockedError] = useState<{ reason: string; appealHint: string } | null>(null);
 
   const handleAccept = async () => {
     setIsLocking(true);
     setErrorMsg(null);
+    setBlockedError(null);
     try {
       await updateOrderStatus(order.id, 'accepted', {
         helperName: currentUser.name,
@@ -73,6 +76,16 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
         msg.toLowerCase().includes('conflict')
       ) {
         setAlreadyAcceptedByOther(true);
+      } else if (
+        err?.status === 403 ||
+        err?.isForbidden ||
+        msg.includes('403') ||
+        msg.toLowerCase().includes('verify your college email')
+      ) {
+        setBlockedError({
+          reason: err?.reason || msg || 'Helper action blocked by campus safety policy or unverified email requirement.',
+          appealHint: err?.appealHint || 'You can submit an appeal or inquiry through the Report a Problem page.'
+        });
       } else {
         setErrorMsg(msg || 'Failed to accept request. Please try again.');
       }
@@ -89,6 +102,27 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
         <ArrowLeft className="w-4 h-4" />
         <span>Back to Request Feed</span>
       </button>
+
+      {/* Blocked Action Banner (Issue #28 Trust UX: 403 reason + appeal hint) */}
+      {blockedError && (
+        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-bold">Action Restricted by Server (HTTP 403)</strong>
+              <p className="mt-0.5">{blockedError.reason}</p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-medium">{blockedError.appealHint}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('/app/report')}
+            className="px-3.5 py-2 rounded-btn bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 self-end sm:self-center shadow-sm"
+          >
+            Submit Appeal
+          </button>
+        </div>
+      )}
 
       {/* "No Longer Available" Notice if someone accepted first */}
       {alreadyAcceptedByOther && (

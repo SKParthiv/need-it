@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   ShieldCheck,
+  ShieldAlert,
   ShoppingBag,
   Store,
 } from 'lucide-react';
@@ -84,6 +85,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
     },
   ]);
   const [prohibitedError, setProhibitedError] = useState<string | null>(null);
+  const [blockedError, setBlockedError] = useState<{ reason: string; appealHint: string } | null>(null);
 
   // STEP 2 STATE: Pickup & Timing Options
   const [pickupPoint, setPickupPoint] = useState<string>(
@@ -304,6 +306,27 @@ export const PostRequest: React.FC<PostRequestProps> = ({
           Request items from campus canteens and shops. A peer will pick them up for you.
         </p>
       </div>
+
+      {/* Server-Side Block (403) Banner (Issue #28 Trust UX requirement) */}
+      {blockedError && (
+        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+          <div className="flex items-start gap-2.5">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-bold">Posting Restricted by Server (HTTP 403)</strong>
+              <p className="mt-0.5">{blockedError.reason}</p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-medium">{blockedError.appealHint}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('/app/report')}
+            className="px-3.5 py-2 rounded-btn bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 self-end sm:self-center shadow-sm"
+          >
+            Submit Appeal
+          </button>
+        </div>
+      )}
 
       {/* Step Progress Indicator */}
       <div className="bg-white dark:bg-neutral-dark-card rounded-panel border border-neutral-border dark:border-neutral-dark-border p-3 sm:p-4 shadow-sm">

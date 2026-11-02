@@ -36,6 +36,10 @@ interface WebAppContextType {
     pickupPoint: string;
     isVerified: boolean;
     upiId?: string;
+    ratingAverage?: number;
+    ratingCount?: number;
+    completedOrdersCount?: number;
+    problemCount?: number;
   };
   updateCurrentUser: (patch: Partial<WebAppContextType['currentUser']>) => void;
   isSuperAdmin: boolean;
@@ -211,6 +215,10 @@ const DEFAULT_USERS = {
     pickupPoint: 'Canopy Canteen',
     isVerified: true,
     upiId: '',
+    ratingAverage: 4.9,
+    ratingCount: 18,
+    completedOrdersCount: 14,
+    problemCount: 0,
   },
   helper: {
     name: 'Priya K.',
@@ -220,6 +228,10 @@ const DEFAULT_USERS = {
     pickupPoint: 'Library Circle',
     isVerified: true,
     upiId: 'helper@okhdfc',
+    ratingAverage: 4.95,
+    ratingCount: 36,
+    completedOrdersCount: 32,
+    problemCount: 0,
   },
   club: {
     name: 'Campus Safety Council Admin',
@@ -229,6 +241,10 @@ const DEFAULT_USERS = {
     pickupPoint: 'Main Gate Security',
     isVerified: true,
     upiId: '',
+    ratingAverage: 5.0,
+    ratingCount: 12,
+    completedOrdersCount: 50,
+    problemCount: 0,
   },
 };
 
@@ -376,14 +392,34 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
+  // Periodic background sync + immediate window focus & tab visibility polling (Issue #28 DoD)
   useEffect(() => {
     refreshOrders();
     refreshNotifications();
+
+    const handleFocusSync = () => {
+      refreshOrders();
+      refreshNotifications();
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocusSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
     const timer = setInterval(() => {
       refreshOrders();
       refreshNotifications();
     }, 5000);
-    return () => clearInterval(timer);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      clearInterval(timer);
+    };
   }, [refreshOrders, refreshNotifications]);
 
   const login = async (email: string, password?: string, preferredRole: UserRole = 'customer') => {

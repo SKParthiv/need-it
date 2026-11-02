@@ -133,6 +133,14 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [handoverError, setHandoverError] = useState('');
   const [copiedOtp, setCopiedOtp] = useState(false);
+  const [handoverAttempts, setHandoverAttempts] = useState<number>(0);
+  const [isHandoverLocked, setIsHandoverLocked] = useState<boolean>(false);
+
+  // Photo upload availability (Issue #28: If signature returns 503, hide photo buttons and continue without photos)
+  const [photosSupported, setPhotosSupported] = useState<boolean>(true);
+
+  // Blocked / Forbidden notice (Issue #28 Trust UX: 403 reason + appeal hint)
+  const [blockedNotice, setBlockedNotice] = useState<{ reason: string; appealHint: string } | null>(null);
 
   // Purchase state
   const [isMarkingPurchased, setIsMarkingPurchased] = useState(false);
@@ -156,7 +164,23 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     scrollToBottom();
   }, [chatData.messages.length]);
 
-  // Sync real messages from backend
+  // Check photo upload service on mount (Issue #28: 503 hides photo buttons)
+  useEffect(() => {
+    let isMounted = true;
+    api
+      .isPhotoUploadAvailable()
+      .then((avail) => {
+        if (isMounted) setPhotosSupported(avail);
+      })
+      .catch(() => {
+        if (isMounted) setPhotosSupported(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync real messages from backend + instant window focus & tab visibility polling (Issue #28 DoD)
   useEffect(() => {
     let isMounted = true;
     const loadChat = async () => {
@@ -167,16 +191,35 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       }
     };
     loadChat();
+
+    const handleFocusSync = () => {
+      if (isMounted) {
+        fetchMessages(orderId).catch(() => {});
+        refreshOrders().catch(() => {});
+      }
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocusSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
     const interval = setInterval(() => {
       if (isMounted) {
         fetchMessages(orderId).catch(() => {});
       }
     }, 4000);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
       clearInterval(interval);
     };
-  }, [orderId]);
+  }, [orderId, fetchMessages, refreshOrders]);
 
   // Fetch actual payment status from server
   useEffect(() => {
@@ -327,6 +370,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       await proposePrice(order.id, itemId, price, helperPhotoUrl[itemId]);
       await refreshOrders();
     } catch (err: any) {
+      if (err?.status === 403 || err?.isForbidden || String(err?.message).includes('403')) {
+        setBlockedNotice({
+          reason: err?.reason || err?.message || 'Only verified campus helpers can submit shelf prices.',
+          appealHint: err?.appealHint || 'Please submit an appeal through the Report a Problem page.'
+        });
+      }
       setPriceApproveError(err?.message || 'Could not submit price. Try again.');
     } finally {
       setHelperPriceBusy('');
@@ -341,6 +390,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       await approvePrices(order.id);
       await refreshOrders();
     } catch (err: any) {
+      if (err?.status === 403 || err?.isForbidden || String(err?.message).includes('403')) {
+        setBlockedNotice({
+          reason: err?.reason || err?.message || 'Price approval restricted by safety policy.',
+          appealHint: err?.appealHint || 'Please submit an appeal through the Report a Problem page.'
+        });
+      }
       setPriceApproveError(err?.message || 'Could not approve prices. Try again.');
     } finally {
       setApprovingPrice(false);
@@ -358,6 +413,12 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       setPaymentData((prev) => ({ ...prev, status: 'pending' }));
       await refreshOrders();
     } catch (err: any) {
+      if (err?.status === 403 || err?.isForbidden || String(err?.message).includes('403')) {
+        setBlockedNotice({
+          reason: err?.reason || err?.message || 'Payment initiation restricted by campus safety policy.',
+          appealHint: err?.appealHint || 'Please submit an appeal through the Report a Problem page.'
+        });
+      }
       setPaymentError(err?.message || 'Payment initiation failed. Try again.');
     } finally {
       setIsPaying(false);
@@ -373,14 +434,21 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       setPaymentData((prev) => ({ ...prev, status: 'held' }));
       await refreshOrders();
     } catch (err: any) {
+      if (err?.status === 403 || err?.isForbidden || String(err?.message).includes('403')) {
+        setBlockedNotice({
+          reason: err?.reason || err?.message || 'Payment confirmation restricted.',
+          appealHint: err?.appealHint || 'Please submit an appeal through the Report a Problem page.'
+        });
+      }
       setPaymentError(err?.message || 'Payment confirmation failed. Try again.');
     } finally {
       setIsConfirmingPayment(false);
     }
   };
 
-  // Helper handover verification
+  // Helper handover verification (Issue #28: Enter OTP, 5 wrong = locked)
   const handleVerifyHandover = async () => {
+    if (isHandoverLocked) return;
     if (handoverInputCode.trim().length !== 4) {
       setHandoverError('Please enter the 4-digit code shown by customer.');
       return;
@@ -390,8 +458,25 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     try {
       await confirmHandover(order.id, handoverInputCode.trim());
       await refreshOrders();
+      setHandoverAttempts(0);
     } catch (err: any) {
-      setHandoverError(err?.message || 'Incorrect verification code. Try again.');
+      const msg = String(err?.message || '');
+      const newAttempts = handoverAttempts + 1;
+      setHandoverAttempts(newAttempts);
+
+      if (
+        newAttempts >= 5 ||
+        msg.toLowerCase().includes('too many wrong') ||
+        msg.toLowerCase().includes('locked')
+      ) {
+        setIsHandoverLocked(true);
+        setHandoverError('Delivery Locked: 5 incorrect codes entered. Handover verification is locked for student safety.');
+      } else {
+        const remaining = 5 - newAttempts;
+        setHandoverError(
+          err?.message || `Incorrect verification code (${newAttempts}/5 attempts). ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
+        );
+      }
     } finally {
       setIsVerifyingCode(false);
     }
@@ -696,6 +781,27 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
 
       {/* 2. MAIN ORDER CHAT & INLINE EVENT STREAM */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Blocked Action Banner (Issue #28 Trust UX: 403 reason + appeal hint) */}
+        {blockedNotice && (
+          <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm animate-fade-in">
+            <div className="flex items-start gap-2.5">
+              <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Action Restricted by Server (HTTP 403)</strong>
+                <p className="mt-0.5">{blockedNotice.reason}</p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-medium">{blockedNotice.appealHint}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('/app/report')}
+              className="px-3.5 py-2 rounded-btn bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 self-end sm:self-center shadow-sm"
+            >
+              Submit Appeal
+            </button>
+          </div>
+        )}
+
         {/* ORDER PROGRESS TRACKER & ACTION GUIDE */}
         <div className="p-4 rounded-panel bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-neutral-dark-border shadow-e1 space-y-3">
           {/* 4-Step Progress Bar */}
@@ -901,23 +1007,26 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                         className="w-24 h-9 px-2.5 rounded-input bg-white dark:bg-slate-900 border border-neutral-border text-xs font-mono"
                       />
 
-                      <label className="h-9 px-2.5 rounded-btn border text-[11px] font-semibold flex items-center gap-1 cursor-pointer hover:bg-neutral-surface-alt">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleHelperShelfPhoto(item.id, e.target.files?.[0])}
-                          disabled={helperPhotoBusy[item.id]}
-                        />
-                        <Camera className="w-3 h-3 text-brand-teal" />
-                        <span>
-                          {helperPhotoBusy[item.id]
-                            ? '...'
-                            : helperPhotoUrl[item.id] || item.evidencePhotoUrl
-                            ? 'Photo ✓'
-                            : 'Photo'}
-                        </span>
-                      </label>
+                      {/* Shelf Photo Attachment (Hidden if signature returns 503 per Issue #28) */}
+                      {photosSupported ? (
+                        <label className="h-9 px-2.5 rounded-btn border text-[11px] font-semibold flex items-center gap-1 cursor-pointer hover:bg-neutral-surface-alt">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleHelperShelfPhoto(item.id, e.target.files?.[0])}
+                            disabled={helperPhotoBusy[item.id]}
+                          />
+                          <Camera className="w-3 h-3 text-brand-teal" />
+                          <span>
+                            {helperPhotoBusy[item.id]
+                              ? '...'
+                              : helperPhotoUrl[item.id] || item.evidencePhotoUrl
+                              ? 'Photo ✓'
+                              : 'Photo'}
+                          </span>
+                        </label>
+                      ) : null}
 
                       <button
                         onClick={() => handleHelperSubmitPrice(item.id)}
@@ -1238,36 +1347,64 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               </div>
             )}
 
-            {/* Helper view: OTP input form */}
+            {/* Helper view: OTP locked or input form (Issue #28: 5 wrong = locked) */}
             {role === 'helper' && order.status === 'purchased' && (
-              <div className="space-y-3 max-w-xs mx-auto">
-                <p className="text-xs text-neutral-secondary">
-                  Meet {order.customerAlias} at {order.pickupPoint} and enter their 4-digit code:
-                </p>
+              <div className="space-y-3 max-w-sm mx-auto">
+                {isHandoverLocked ? (
+                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-center space-y-2.5 animate-shake">
+                    <div className="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 mx-auto flex items-center justify-center">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-heading font-extrabold text-sm text-rose-900 dark:text-rose-200">
+                        Delivery Handover Locked
+                      </h4>
+                      <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                        5 incorrect verification codes were entered. For student safety, OTP verification is locked.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('/app/report')}
+                      className="px-4 py-2 rounded-btn bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Contact Support / File Appeal</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-neutral-secondary">
+                      Meet {order.customerAlias} at {order.pickupPoint} and enter their 4-digit code:
+                    </p>
 
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={handoverInputCode}
-                  onChange={(e) => {
-                    setHandoverInputCode(e.target.value);
-                    setHandoverError('');
-                  }}
-                  placeholder="••••"
-                  className="w-40 h-12 mx-auto text-center font-mono font-extrabold text-2xl tracking-[0.2em] rounded-input border-2 border-brand-teal text-neutral-ink dark:text-neutral-dark-text focus:outline-none"
-                />
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={handoverInputCode}
+                      onChange={(e) => {
+                        setHandoverInputCode(e.target.value);
+                        setHandoverError('');
+                      }}
+                      placeholder="••••"
+                      className="w-40 h-12 mx-auto text-center font-mono font-extrabold text-2xl tracking-[0.2em] rounded-input border-2 border-brand-teal text-neutral-ink dark:text-neutral-dark-text focus:outline-none"
+                    />
 
-                {handoverError && (
-                  <p className="text-xs text-semantic-danger font-medium">{handoverError}</p>
+                    {handoverError && (
+                      <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 font-medium text-center">
+                        {handoverError}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleVerifyHandover}
+                      disabled={isVerifyingCode || handoverInputCode.trim().length !== 4}
+                      className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-semibold shadow-sm disabled:opacity-50"
+                    >
+                      {isVerifyingCode ? 'Checking code...' : 'Confirm Delivery'}
+                    </button>
+                  </>
                 )}
-
-                <button
-                  onClick={handleVerifyHandover}
-                  disabled={isVerifyingCode || handoverInputCode.trim().length !== 4}
-                  className="w-full h-11 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-semibold shadow-sm disabled:opacity-50"
-                >
-                  {isVerifyingCode ? 'Checking code...' : 'Confirm Delivery'}
-                </button>
               </div>
             )}
           </div>
@@ -1459,20 +1596,22 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
               onChange={handleFileSelect}
             />
 
-            {/* Photo Attachment Button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className={`h-11 w-11 rounded-btn flex items-center justify-center border transition-colors shrink-0 ${
-                attachedFile
-                  ? 'border-brand-indigo text-brand-indigo bg-brand-indigo-light'
-                  : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:text-brand-indigo hover:bg-neutral-surface-alt'
-              }`}
-              title="Attach photo"
-              aria-label="Attach photo"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
+            {/* Photo Attachment Button (Hidden if signature returns 503 per Issue #28) */}
+            {photosSupported && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`h-11 w-11 rounded-btn flex items-center justify-center border transition-colors shrink-0 ${
+                  attachedFile
+                    ? 'border-brand-indigo text-brand-indigo bg-brand-indigo-light'
+                    : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:text-brand-indigo hover:bg-neutral-surface-alt'
+                }`}
+                title="Attach photo"
+                aria-label="Attach photo"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Text Input */}
             <input

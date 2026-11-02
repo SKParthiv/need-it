@@ -33,6 +33,31 @@ export const getStoredUser = () => {
   }
 };
 
+export class ApiError extends Error {
+  status: number;
+  data: any;
+  isForbidden?: boolean;
+  reason?: string;
+  appealHint?: string;
+
+  constructor(status: number, data: any, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+    if (status === 403) {
+      this.isForbidden = true;
+      this.reason =
+        data?.detail ||
+        data?.reason ||
+        'This action is blocked by campus safety policy or verified student requirements.';
+      this.appealHint =
+        data?.appeal_hint ||
+        'If you believe this restriction is an error, please file an appeal through the Report a Problem page.';
+    }
+  }
+}
+
 interface ApiFetchOptions extends RequestInit {
   timeoutMs?: number;
 }
@@ -75,8 +100,10 @@ async function apiFetch<T = any>(endpoint: string, options: ApiFetchOptions = {}
     }
 
     if (!response.ok) {
-      const errorMsg = data.detail || (typeof data === 'object' ? JSON.stringify(data) : 'API Error');
-      throw new Error(errorMsg);
+      const errorMsg =
+        data?.detail ||
+        (typeof data === 'object' ? (data.error || JSON.stringify(data)) : 'API Error');
+      throw new ApiError(response.status, data, errorMsg);
     }
 
     return data as T;
@@ -252,46 +279,54 @@ export const api = {
     );
   },
 
-  /** Direct browser→Cloudinary signed upload. If Cloudinary credentials or backend
-   *  storage signature are unconfigured or fail (e.g. 503 or offline), degrades
-   *  seamlessly to an inline Data URL so users can preview and attach photos without
-   *  crashing with "Failed to fetch". */
-  async uploadEvidencePhoto(file: File): Promise<string> {
+  /**
+   * Checks whether Cloudinary photo uploads are active.
+   * Per Issue #28: If signature returns 503, hide photo buttons and continue without photos.
+   */
+  async isPhotoUploadAvailable(): Promise<boolean> {
     try {
-      const sig = await this.getUploadSignature().catch(() => null);
-      if (sig && sig.cloudName && sig.apiKey && sig.signature) {
-        const form = new FormData();
-        form.append('file', file);
-        form.append('api_key', sig.apiKey);
-        form.append('timestamp', String(sig.timestamp));
-        form.append('folder', sig.folder || 'needit-evidence');
-        form.append('signature', sig.signature);
-        const resp = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
-          method: 'POST',
-          body: form,
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && data.secure_url) {
-            return data.secure_url as string;
-          }
-        }
+      const sig = await this.getUploadSignature();
+      return Boolean(sig && sig.cloudName && sig.apiKey && sig.signature);
+    } catch (err: any) {
+      if (err?.status === 503 || err?.message?.includes('503')) {
+        return false;
       }
-    } catch (cloudErr) {
-      console.warn('[Upload] Cloudinary upload unavailable, using local image data:', cloudErr);
+      return false;
+    }
+  },
+
+  /** Direct browser→Cloudinary signed upload. Per Issue #28, if signature fails or returns 503, photo upload is disabled. */
+  async uploadEvidencePhoto(file: File): Promise<string> {
+    const sig = await this.getUploadSignature().catch((err: any) => {
+      const is503 = err?.status === 503 || err?.message?.includes('503');
+      throw new Error(is503 ? 'Photo upload service unavailable (HTTP 503).' : (err?.message || 'Upload signature failed'));
+    });
+
+    if (!sig || !sig.cloudName || !sig.apiKey || !sig.signature) {
+      throw new Error('Photo storage signature is missing or unavailable (HTTP 503).');
     }
 
-    // Client-side fallback: convert to base64 Data URL so the photo is never lost
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve(reader.result as string);
-      };
-      reader.onerror = () => {
-        resolve(URL.createObjectURL(file));
-      };
-      reader.readAsDataURL(file);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('api_key', sig.apiKey);
+    form.append('timestamp', String(sig.timestamp));
+    form.append('folder', sig.folder || 'needit-evidence');
+    form.append('signature', sig.signature);
+
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+      method: 'POST',
+      body: form,
     });
+
+    if (!resp.ok) {
+      throw new Error(`Cloudinary upload failed with HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    if (!data?.secure_url) {
+      throw new Error('Cloudinary response missing secure_url');
+    }
+    return data.secure_url as string;
   },
 
   async approvePrice(requestId: string | number, itemIds?: number[]) {
