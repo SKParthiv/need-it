@@ -142,7 +142,7 @@ export const ReportProblemPage: React.FC<ReportProblemPageProps> = ({ onNavigate
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <button
         onClick={() => onNavigate('/app/home')}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink"

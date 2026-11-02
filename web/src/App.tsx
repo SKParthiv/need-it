@@ -242,7 +242,7 @@ const AppContent: React.FC = () => {
     }
     if (currentPath === '/app/notifications') return <NotificationsPage onNavigate={navigate} />;
     if (currentPath === '/app/profile') return <ProfilePage role={role} onNavigate={navigate} onLogout={() => navigate('/login')} />;
-    if (currentPath === '/app/ask') return <AskNeeditPage onNavigate={navigate} />;
+    if (currentPath === '/app/ask') return <CustomerHome onNavigate={navigate} onOpenAskNeedit={() => {}} />;
     if (currentPath === '/app/report') return <ReportProblemPage onNavigate={navigate} />;
 
     // 6. Club Console
@@ -332,12 +332,7 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      {/* Ask NEEDIT Shop Chatbot Panel */}
-      <AskNeeditModal
-        isOpen={askNeeditOpen}
-        onClose={() => setAskNeeditOpen(false)}
-        onNavigate={navigate}
-      />
+      {/* AI features hidden per requirements */}
 
       {/* Site Master Navigator HUD (Persistent interactive switcher for all 35+ pages) */}
       <SiteNavigatorHUD

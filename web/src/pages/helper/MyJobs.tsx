@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StatusChip } from '../../components/common/StatusChip';
 import { CampusClockWidget } from '../../components/common/CampusClockWidget';
 import { useWebApp } from '../../context/WebAppContext';
-import { Briefcase, Calendar, ChevronRight, Clock, MapPin } from 'lucide-react';
+import { Briefcase, Calendar, ChevronRight, Clock, MapPin, MessageSquare } from 'lucide-react';
 
 interface MyJobsProps {
   onNavigate: (path: string) => void;
@@ -23,8 +23,8 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
   const displayedJobs = activeTab === 'active' ? activeJobs : pastJobs;
 
   return (
-    <div className="w-full max-w-content mx-auto px-4 sm:px-6 py-8 space-y-6">
-      {/* Campus Countdown Clock Banner (Controlled via Dev Admin) */}
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      {/* Campus Countdown Clock Banner */}
       <CampusClockWidget currentRole="helper" />
 
       {/* Header */}
@@ -34,7 +34,7 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
             My Delivery Jobs
           </h1>
           <p className="text-xs sm:text-sm text-neutral-secondary">
-            Manage your accepted orders, chat with peers, and confirm handovers.
+            Manage your accepted orders, chat with customers, and confirm deliveries.
           </p>
         </div>
 
@@ -47,11 +47,11 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
         </button>
       </div>
 
-      {/* Tabs: Active / Past (Section 7.3) */}
+      {/* Tabs: Active / Past */}
       <div className="flex border-b border-neutral-border dark:border-slate-800">
         <button
           onClick={() => setActiveTab('active')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-6 py-3.5 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'active'
               ? 'border-brand-teal text-brand-teal'
               : 'border-transparent text-neutral-secondary hover:text-neutral-ink'
@@ -65,7 +65,7 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
 
         <button
           onClick={() => setActiveTab('past')}
-          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-6 py-3.5 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'past'
               ? 'border-brand-teal text-brand-teal'
               : 'border-transparent text-neutral-secondary hover:text-neutral-ink'
@@ -79,7 +79,7 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
       </div>
 
       {/* Jobs List */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         {displayedJobs.length === 0 ? (
           <div className="p-12 text-center rounded-panel bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-slate-800 space-y-3">
             <Briefcase className="w-10 h-10 text-neutral-placeholder mx-auto" />
@@ -94,7 +94,7 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
             {activeTab === 'active' && (
               <button
                 onClick={() => onNavigate('/app/helper/feed')}
-                className="mt-2 h-10 px-5 rounded-btn bg-brand-teal text-white text-xs font-semibold shadow-sm hover:bg-teal-700 transition-colors"
+                className="mt-2 h-11 px-6 rounded-btn bg-brand-teal text-white text-xs font-bold shadow-sm hover:bg-teal-700 transition-colors"
               >
                 Browse Campus Feed
               </button>
@@ -105,41 +105,50 @@ export const MyJobs: React.FC<MyJobsProps> = ({ onNavigate }) => {
             <div
               key={job.id}
               onClick={() => onNavigate(`/app/helper/jobs/${job.id}`)}
-              className="p-5 rounded-card bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-neutral-dark-border shadow-e1 hover:shadow-e2 transition-all cursor-pointer space-y-3 group"
+              className="p-5 sm:p-6 rounded-card bg-white dark:bg-neutral-dark-card border border-neutral-border dark:border-neutral-dark-border shadow-e1 hover:shadow-e2 transition-all cursor-pointer space-y-4 group"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-border/60 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <span className="font-mono text-xs font-bold text-neutral-placeholder">
                     #{job.id}
                   </span>
                   <StatusChip status={job.status} size="sm" />
                   <span className="text-xs text-neutral-secondary font-medium">
-                    {job.customerAlias}
+                    Customer: {job.customerAlias}
                   </span>
                 </div>
 
                 <div className="text-right">
                   <span className="text-xs font-bold text-brand-teal font-mono block">
-                    Fee: ₹{job.helperFee}
+                    You Earn: ₹{job.helperFee}
                   </span>
                 </div>
               </div>
 
-              <div className="flex justify-between items-start">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                 <div>
-                  <h3 className="font-heading font-semibold text-base text-neutral-ink dark:text-neutral-dark-text group-hover:text-brand-teal transition-colors">
+                  <h3 className="font-heading font-bold text-base text-neutral-ink dark:text-neutral-dark-text group-hover:text-brand-teal transition-colors">
                     {job.items.map((it) => `${it.quantity}x ${it.name}`).join(', ')}
                   </h3>
-                  <p className="text-xs text-neutral-secondary flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs text-neutral-secondary flex items-center gap-1.5 mt-1">
                     <MapPin className="w-3.5 h-3.5 text-brand-indigo" />
                     <span>Deliver to: {job.pickupPoint}</span>
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1 text-xs text-brand-teal font-semibold">
-                  <span>Open Job →</span>
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                </div>
+                {/* Big, Visible Chat & Job Action Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate(`/app/helper/jobs/${job.id}`);
+                  }}
+                  className="h-10 px-5 rounded-btn bg-brand-teal hover:bg-brand-teal-dark text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all shrink-0"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Open Job Chat</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           ))

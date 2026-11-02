@@ -88,7 +88,6 @@ export const SiteNavigatorHUD: React.FC<SiteNavigatorHUDProps> = ({
         { label: 'Chat Detail #ORD-1092', path: '/app/chat/ORD-1092' },
         { label: 'Notifications Center', path: '/app/notifications' },
         { label: 'Profile & Preferences', path: '/app/profile' },
-        { label: 'Ask NEEDIT Chatbot', path: '/app/ask' },
         { label: 'Report a Problem', path: '/app/report' },
       ]
     },

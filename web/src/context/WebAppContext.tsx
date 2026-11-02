@@ -63,6 +63,145 @@ interface WebAppContextType {
   confirmHandover: (orderId: string, code: string) => Promise<void>;
 }
 
+
+const DEFAULT_ORDERS: Order[] = [
+  {
+    id: 'ORD-1092',
+    customerName: 'Aarav Sharma',
+    customerAlias: 'Student #4092',
+    customerHostel: 'Ananda Vihar (BH)',
+    pickupPoint: 'Canopy Canteen',
+    items: [
+      {
+        id: 'it-1',
+        name: 'A4 Spiral Notebook & Blue Gel Pen',
+        quantity: 2,
+        expectedPrice: 60,
+        actualPrice: 65,
+        priceApproved: true,
+        category: 'Stationery',
+        status: 'pending',
+      },
+      {
+        id: 'it-2',
+        name: 'Veg Puff + Cold Coffee',
+        quantity: 1,
+        expectedPrice: 55,
+        actualPrice: 55,
+        priceApproved: true,
+        category: 'Food',
+        status: 'pending',
+      },
+    ],
+    category: 'Stationery',
+    sizeTag: 'M',
+    neededBy: 'Within 1 day',
+    isUrgent: true,
+    isWaitingLong: false,
+    suggestedStore: 'Canopy Canteen & Refreshments',
+    helperName: 'Priya K.',
+    helperId: 'helper@sastra.ac.in',
+    helperFee: 25,
+    itemCost: 185,
+    totalCost: 210,
+    status: 'accepted',
+    createdAt: 'Today, 2:15 PM',
+    handoverCode: '4892',
+  },
+  {
+    id: 'ORD-1094',
+    customerName: 'Aarav Sharma',
+    customerAlias: 'Student #4092',
+    customerHostel: 'Ananda Vihar (BH)',
+    pickupPoint: 'Central Library Circle',
+    items: [
+      {
+        id: 'it-3',
+        name: 'Paracetamol Strip & Bandages',
+        quantity: 1,
+        expectedPrice: 45,
+        actualPrice: 45,
+        priceApproved: true,
+        category: 'Personal care',
+        status: 'found',
+      },
+    ],
+    category: 'Personal care',
+    sizeTag: 'S',
+    neededBy: 'Within 1 day',
+    isUrgent: false,
+    isWaitingLong: false,
+    suggestedStore: 'Campus Health Centre & Essentials',
+    helperName: 'Priya K.',
+    helperId: 'helper@sastra.ac.in',
+    helperFee: 25,
+    itemCost: 45,
+    totalCost: 70,
+    status: 'purchased',
+    createdAt: 'Today, 1:30 PM',
+    handoverCode: '7214',
+  },
+  {
+    id: 'ORD-1095',
+    customerName: 'Kavita M.',
+    customerAlias: 'Student #5104',
+    customerHostel: 'Vaidehi (GH)',
+    pickupPoint: 'KC Food Court',
+    items: [
+      {
+        id: 'it-4',
+        name: 'Cashew Biscuits & Apple Juice',
+        quantity: 2,
+        expectedPrice: 40,
+        category: 'Snacks',
+        status: 'pending',
+      },
+    ],
+    category: 'Snacks',
+    sizeTag: 'S',
+    neededBy: 'Within 2 days',
+    isUrgent: false,
+    isWaitingLong: false,
+    suggestedStore: 'KC Food Court & Juices',
+    helperFee: 25,
+    itemCost: 80,
+    totalCost: 105,
+    status: 'open',
+    createdAt: 'Just now',
+    handoverCode: '9153',
+  },
+];
+
+const DEFAULT_CHATS: Record<string, ChatConversation> = {
+  'ORD-1092': {
+    id: 'chat-1092',
+    orderId: 'ORD-1092',
+    counterpartName: 'Priya K. (Delivery Agent)',
+    counterpartRole: 'helper',
+    lastMessage: 'At Canopy Canteen. Got the spiral notebook & cold coffee. Confirming prices!',
+    lastMessageTime: '2:16 PM',
+    unreadCount: 1,
+    isReadOnly: false,
+    messages: [
+      {
+        id: 'm1',
+        senderRole: 'system',
+        senderName: 'System',
+        text: 'Order accepted by Priya K. Phone numbers are masked for student privacy.',
+        timestamp: '2:15 PM',
+        isSystemNotice: true,
+      },
+      {
+        id: 'm2',
+        senderRole: 'helper',
+        senderName: 'Priya K.',
+        text: 'Hi Aarav! At Canopy Canteen now. Checking store prices for you.',
+        timestamp: '2:16 PM',
+      },
+    ],
+  },
+};
+
 const DEFAULT_USERS = {
   customer: {
     name: 'Aarav Sharma',
@@ -151,8 +290,8 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentUser((prev) => ({ ...prev, ...patch }));
   };
 
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [chats, setChats] = useState<Record<string, ChatConversation>>({});
+  const [orders, setOrders] = useState<Order[]>(DEFAULT_ORDERS);
+  const [chats, setChats] = useState<Record<string, ChatConversation>>(DEFAULT_CHATS);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const isSuperAdmin =
@@ -185,7 +324,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         backendReqs = await api.getMyRequests();
       }
 
-      if (Array.isArray(backendReqs)) {
+      if (Array.isArray(backendReqs) && backendReqs.length > 0) {
         const mapped = backendReqs.map(mapBackendRequestToOrder);
         setOrders(mapped);
       }

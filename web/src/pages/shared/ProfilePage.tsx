@@ -98,7 +98,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           .toUpperCase() || 'AS';
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <div>
         <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-neutral-ink dark:text-neutral-dark-text">
           Student Profile & Settings

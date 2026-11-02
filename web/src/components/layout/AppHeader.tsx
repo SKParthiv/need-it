@@ -1,14 +1,14 @@
 import React from 'react';
 import { Logo } from '../common/Logo';
 import { VerifiedBadge } from '../common/VerifiedBadge';
-import { Bell, Sparkles, Sun, Moon, ArrowLeftRight, UserCheck, Lock } from 'lucide-react';
+import { Bell, MessageSquare, Sun, Moon, ArrowLeftRight, UserCheck, Lock } from 'lucide-react';
 import { UserRole } from '../../types';
 
 interface AppHeaderProps {
   role: UserRole;
   onRoleChange: (newRole: UserRole) => void;
   onNavigate: (path: string) => void;
-  onOpenAskNeedit: () => void;
+  onOpenAskNeedit?: () => void;
   unreadNotificationsCount?: number;
   isDark: boolean;
   onToggleDark: () => void;
@@ -20,7 +20,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   role,
   onRoleChange,
   onNavigate,
-  onOpenAskNeedit,
   unreadNotificationsCount = 0,
   isDark,
   onToggleDark,
@@ -122,15 +121,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* Right Action Icons */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Ask NEEDIT shortcut button */}
+          {/* Prominent Messages & Order Chat Button */}
           {!isClub && (
             <button
-              onClick={onOpenAskNeedit}
-              className="flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-xs font-medium bg-brand-indigo-light text-brand-indigo dark:bg-brand-indigo/20 dark:text-brand-indigo-darkmode hover:bg-brand-indigo/15 transition-colors"
-              title="Ask NEEDIT shop assistant"
+              onClick={() => onNavigate('/app/chat')}
+              className="flex items-center gap-2 h-10 px-4 rounded-btn text-xs font-bold bg-brand-indigo hover:bg-brand-indigo-dark text-white shadow-sm transition-all active:scale-95 shrink-0"
+              title="Open order messages and chats"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Ask NEEDIT</span>
+              <MessageSquare className="w-4 h-4" />
+              <span>Chat</span>
             </button>
           )}
 

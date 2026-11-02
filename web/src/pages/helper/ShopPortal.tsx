@@ -40,7 +40,7 @@ export const ShopPortal: React.FC<ShopPortalProps> = ({ onNavigate }) => {
           Helper Shop Portal
         </h1>
         <p className="text-xs sm:text-sm text-neutral-secondary">
-          Add nearby shops, items bought, and retail prices to train the "Ask NEEDIT" campus chatbot.
+          Add nearby shops, items bought, and retail prices to help campus helpers find store items and check shelf availability.
         </p>
       </div>
 

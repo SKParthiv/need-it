@@ -4,9 +4,7 @@ import {
   Store,
   MapPin,
   Clock,
-  DollarSign,
   ShieldCheck,
-  CheckCircle2,
   AlertCircle,
   Lock,
   Package
@@ -56,7 +54,6 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleAccept = async () => {
-    // Section 10.4: Accept request (lock): card gets teal border, lock icon morphs in, confirms exclusivity
     setIsLocking(true);
     setErrorMsg(null);
     try {
@@ -83,7 +80,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6 pb-28">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6 pb-28">
       {/* Back button */}
       <button
         onClick={() => onNavigate('/app/helper/feed')}
@@ -93,7 +90,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
         <span>Back to Request Feed</span>
       </button>
 
-      {/* "No Longer Available" Notice if someone accepted first (Section 7.2) */}
+      {/* "No Longer Available" Notice if someone accepted first */}
       {alreadyAcceptedByOther && (
         <div className="p-4 rounded-card bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
@@ -112,7 +109,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
         </div>
       )}
 
-      {/* Other error notice (e.g. 403 blocked student) */}
+      {/* Other error notice */}
       {errorMsg && !alreadyAcceptedByOther && (
         <div className="p-4 rounded-card bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
@@ -123,7 +120,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
         </div>
       )}
 
-      {/* Main Request Card (Section 10.4: Card gets teal border on lock) */}
+      {/* Main Request Card */}
       <div className={`bg-white dark:bg-neutral-dark-card rounded-panel border p-6 sm:p-8 shadow-e2 space-y-6 transition-all duration-300 ${
         isLocking
           ? 'border-2 border-brand-teal ring-4 ring-brand-teal/20 scale-[1.01]'
@@ -149,7 +146,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
             </h1>
           </div>
 
-          <div className="p-3 rounded-card bg-brand-teal-light/60 dark:bg-brand-teal/20 border border-brand-teal/30 text-right shrink-0">
+          <div className="p-3.5 rounded-card bg-brand-teal-light/60 dark:bg-brand-teal/20 border border-brand-teal/30 text-right shrink-0">
             <span className="text-[10px] uppercase font-bold text-brand-teal block">
               You Earn (Helper Fee)
             </span>
@@ -179,7 +176,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
                   </span>
                   {it.notes && (
                     <p className="text-[11px] text-brand-indigo dark:text-brand-indigo-darkmode mt-0.5">
-                      Note from requester: "{it.notes}"
+                      Note: "{it.notes}"
                     </p>
                   )}
                 </div>
@@ -202,7 +199,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
           </div>
 
           <div className="p-3.5 rounded-card bg-neutral-surface-alt dark:bg-slate-800/60 border border-neutral-border dark:border-slate-700 space-y-1">
-            <span className="text-neutral-secondary font-semibold block">Needed By</span>
+            <span className="text-neutral-secondary font-semibold block">Delivery Timing</span>
             <p className="font-medium text-neutral-ink dark:text-neutral-dark-text flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-brand-indigo" />
               {order.neededBy}
@@ -234,7 +231,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({
 
       {/* Sticky Bottom Action Bar */}
       <div className="fixed bottom-0 inset-x-0 z-[200] p-4 bg-white/95 dark:bg-neutral-dark-card/95 backdrop-blur-md border-t border-neutral-border dark:border-neutral-dark-border shadow-e3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div className="hidden xs:block">
             <span className="text-[11px] text-neutral-secondary block">Your Delivery Earnings</span>
             <span className="font-heading font-extrabold text-xl font-mono text-brand-teal">

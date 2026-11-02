@@ -9,10 +9,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   ShieldCheck,
-  Zap,
   ShoppingBag,
   Store,
-  Sparkles,
 } from 'lucide-react';
 import { campusPickupPoints } from '../../data/mockData';
 import { useWebApp } from '../../context/WebAppContext';
@@ -32,13 +30,30 @@ interface ErrandItemInput {
   category: 'Food' | 'Snacks' | 'Personal care' | 'Stationery' | 'Academic supplies';
 }
 
+export type DeliveryTiming =
+  | 'Within 1 day'
+  | 'Within 2 days'
+  | 'Within 3 days'
+  | 'Within 4 days'
+  | 'Within 5 days'
+  | 'More than 5 days';
+
+const DELIVERY_TIMING_OPTIONS: { id: DeliveryTiming; label: string; desc: string }[] = [
+  { id: 'Within 1 day', label: 'Within 1 day', desc: 'Fastest peer delivery (24 hrs)' },
+  { id: 'Within 2 days', label: 'Within 2 days', desc: 'Standard 2-day delivery' },
+  { id: 'Within 3 days', label: 'Within 3 days', desc: 'Flexible 3-day window' },
+  { id: 'Within 4 days', label: 'Within 4 days', desc: 'Relaxed 4-day delivery' },
+  { id: 'Within 5 days', label: 'Within 5 days', desc: 'Delivered within 5 days' },
+  { id: 'More than 5 days', label: 'More than 5 days', desc: 'No rush / flexible date' },
+];
+
 const POPULAR_CAMPUS_PRESETS = [
   { name: 'A4 Spiral Notebook', price: 60, category: 'Stationery' as const },
   { name: 'Blue Gel Pens (Pack of 3)', price: 45, category: 'Stationery' as const },
   { name: 'Veg Puff + Cold Coffee', price: 55, category: 'Food' as const },
   { name: 'Biscuits & Cookies', price: 30, category: 'Snacks' as const },
   { name: 'Paracetamol & Bandages', price: 35, category: 'Personal care' as const },
-  { name: 'Engineering Calculator FX-82MS', price: 620, category: 'Academic supplies' as const },
+  { name: 'Scientific Calculator', price: 620, category: 'Academic supplies' as const },
 ];
 
 export const PostRequest: React.FC<PostRequestProps> = ({
@@ -70,15 +85,15 @@ export const PostRequest: React.FC<PostRequestProps> = ({
   ]);
   const [prohibitedError, setProhibitedError] = useState<string | null>(null);
 
-  // STEP 2 STATE: Pickup (Profile-based default) & Timing Presets (ASAP / Tonight / Tomorrow evening)
+  // STEP 2 STATE: Pickup & Timing Options
   const [pickupPoint, setPickupPoint] = useState<string>(
     currentUser.pickupPoint || campusPickupPoints[0].name
   );
   const [searchLocation, setSearchLocation] = useState<string>('');
-  const [timePreset, setTimePreset] = useState<'ASAP' | 'Tonight' | 'Tomorrow evening'>('ASAP');
+  const [timePreset, setTimePreset] = useState<DeliveryTiming>('Within 1 day');
   const [preferredStore, setPreferredStore] = useState<string>('Canopy Canteen & Refreshments');
 
-  // Filtered 13 campus locations
+  // Filtered campus locations
   const filteredPickupLocations = useMemo(() => {
     if (!searchLocation.trim()) return campusPickupPoints;
     const q = searchLocation.toLowerCase();
@@ -97,7 +112,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
       ];
       for (const nv of nonVegKeywords) {
         if (lower.includes(nv)) {
-          return `"${nv}" is strictly prohibited. Non-vegetarian food items are NOT allowed anywhere on SASTRA campus premises.`;
+          return `"${nv}" is strictly prohibited. Non-vegetarian food items are NOT allowed on campus premises.`;
         }
       }
     }
@@ -108,7 +123,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
     ];
     for (const b of bannedSubstances) {
       if (lower.includes(b)) {
-        return `"${b}" is prohibited by university regulations. Orders for restricted substances cannot be posted.`;
+        return `"${b}" is prohibited by campus regulations.`;
       }
     }
 
@@ -216,24 +231,12 @@ export const PostRequest: React.FC<PostRequestProps> = ({
   const isValueExceeded = calculatedItemsTotal > maxOrderValueAllowed;
   const isFirstItemEmpty = items[0].name.trim().length === 0;
 
-  const getPresetLabel = (preset: 'ASAP' | 'Tonight' | 'Tomorrow evening'): string => {
-    switch (preset) {
-      case 'ASAP':
-        return 'ASAP (Within 45 mins, Rush)';
-      case 'Tonight':
-        return 'Tonight (Before 9:00 PM)';
-      case 'Tomorrow evening':
-        return 'Tomorrow evening (Before 8:00 PM)';
-    }
-  };
-
   // Submit Order - One Confirmation Action on Final Review
   const handleSubmitOrder = () => {
     if (prohibitedError || isValueExceeded || isFirstItemEmpty) return;
 
     const validItems = items.filter((it) => it.name.trim().length > 0);
     const primaryCategory = validItems[0]?.category || 'Food';
-    const neededByText = getPresetLabel(timePreset);
 
     const newOrder = addOrder({
       customerName: currentUser.name,
@@ -252,13 +255,13 @@ export const PostRequest: React.FC<PostRequestProps> = ({
       })),
       category: primaryCategory as any,
       sizeTag: validItems.length > 2 ? 'M' : 'S',
-      neededBy: neededByText,
-      isUrgent: timePreset === 'ASAP',
+      neededBy: timePreset,
+      isUrgent: timePreset === 'Within 1 day',
       isWaitingLong: false,
       suggestedStore: preferredStore,
-      helperFee: 0, // Fee is settled directly via UPI after price approval per v2 contract
+      helperFee: 25,
       itemCost: calculatedItemsTotal,
-      totalCost: calculatedItemsTotal,
+      totalCost: calculatedItemsTotal + 25,
       status: 'open',
     });
 
@@ -266,7 +269,6 @@ export const PostRequest: React.FC<PostRequestProps> = ({
     onNavigate(`/app/orders/${newOrder.id}`);
   };
 
-  // Graceful kill switch banner if admin paused requests
   if (!isPostingAllowed) {
     return (
       <div className="w-full max-w-xl mx-auto px-4 py-16 text-center space-y-4">
@@ -274,51 +276,51 @@ export const PostRequest: React.FC<PostRequestProps> = ({
           ⏸️
         </div>
         <h2 className="font-heading font-bold text-2xl text-neutral-ink dark:text-neutral-dark-text">
-          Errand Posting Temporarily Paused
+          Orders Temporarily Paused
         </h2>
         <p className="text-sm text-neutral-secondary max-w-md mx-auto">
-          The campus administration has temporarily locked new errand submissions. Please check back shortly or review ongoing orders in your dashboard.
+          New requests are temporarily locked. Please check back shortly.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Top Header & Breadcrumb */}
       <div>
         <button
           type="button"
           onClick={() => onNavigate('/app/home')}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink mb-3 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink mb-2 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Dashboard</span>
+          <span>Back to Home</span>
         </button>
         <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-neutral-ink dark:text-neutral-dark-text">
-          Post an Errand Request
+          Post a Request
         </h1>
         <p className="text-xs sm:text-sm text-neutral-secondary">
-          Request items from campus canteens and stores for peer delivery.
+          Request items from campus canteens and shops. A peer will pick them up for you.
         </p>
       </div>
 
-      {/* Progressive Step Progress Indicator */}
+      {/* Step Progress Indicator */}
       <div className="bg-white dark:bg-neutral-dark-card rounded-panel border border-neutral-border dark:border-neutral-dark-border p-3 sm:p-4 shadow-sm">
         <div className="grid grid-cols-3 gap-2 text-xs">
           <button
             type="button"
             onClick={() => setCurrentStep(1)}
-            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
               currentStep === 1
                 ? 'bg-brand-indigo text-white shadow-sm'
                 : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800'
             }`}
           >
-            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono shrink-0">
               1
             </span>
-            <span className="truncate">Items</span>
+            <span>Items</span>
           </button>
 
           <button
@@ -327,16 +329,16 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               if (!isFirstItemEmpty && !prohibitedError) setCurrentStep(2);
             }}
             disabled={isFirstItemEmpty || !!prohibitedError}
-            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
               currentStep === 2
                 ? 'bg-brand-indigo text-white shadow-sm'
                 : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800 disabled:opacity-40'
             }`}
           >
-            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono shrink-0">
               2
             </span>
-            <span className="truncate">Pickup & Timing</span>
+            <span>Timing & Pickup</span>
           </button>
 
           <button
@@ -345,66 +347,57 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               if (!isFirstItemEmpty && !prohibitedError) setCurrentStep(3);
             }}
             disabled={isFirstItemEmpty || !!prohibitedError}
-            className={`py-2 px-1 rounded-lg font-semibold transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
               currentStep === 3
                 ? 'bg-brand-indigo text-white shadow-sm'
                 : 'text-neutral-secondary hover:bg-neutral-surface-alt dark:hover:bg-slate-800 disabled:opacity-40'
             }`}
           >
-            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 font-mono">
+            <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono shrink-0">
               3
             </span>
-            <span className="truncate">Review</span>
+            <span>Review & Confirm</span>
           </button>
         </div>
       </div>
 
-      {/* Main Wizard Container */}
+      {/* Main Form Container */}
       <div className="bg-white dark:bg-neutral-dark-card rounded-2xl border border-neutral-border dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
 
-        {/* ======================================================== */}
-        {/* STEP 1: REPEATING ITEM CARDS & STRICT VEG VALIDATION    */}
-        {/* ======================================================== */}
+        {/* STEP 1: ITEMS */}
         {currentStep === 1 && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6 animate-fade-in">
             <div>
               <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-brand-indigo" />
                 <span>What items do you need?</span>
               </h2>
               <p className="text-xs text-neutral-secondary mt-1">
-                Add each errand item, estimated price, and optional flavor/brand notes.
+                Enter item name, quantity, and approximate price.
               </p>
             </div>
 
-            {/* MANDATORY VEGETARIAN POLICY BANNER */}
-            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 text-xs flex items-start gap-2.5">
-              <span className="text-base shrink-0">🌱</span>
-              <div>
-                <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
-                  Strict Campus Mandate: 100% Vegetarian Only
-                </span>
-                <p className="text-emerald-800 dark:text-emerald-300/90 text-[11px] mt-0.5">
-                  SASTRA University regulations strictly prohibit all non-vegetarian items (meat, chicken, fish, egg, seafood). Non-veg requests will be rejected.
-                </p>
-              </div>
+            {/* Concise Vegetarian Notice */}
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 text-xs flex items-center gap-2 text-emerald-900 dark:text-emerald-200">
+              <span className="text-sm shrink-0">🌱</span>
+              <span><strong>100% Vegetarian Campus:</strong> Non-vegetarian food and restricted goods are not permitted.</span>
             </div>
 
-            {/* Prohibited Alert when user types non-veg or banned word */}
+            {/* Policy Violation Alert */}
             {prohibitedError && (
               <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2.5 animate-shake">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
                 <div>
-                  <span className="font-bold block">Policy Violation Detected</span>
+                  <span className="font-bold block">Restricted Item</span>
                   <p>{prohibitedError}</p>
                 </div>
               </div>
             )}
 
-            {/* Popular Quick-Add Presets */}
+            {/* Quick-Add Popular Items */}
             <div>
-              <span className="text-[11px] font-mono uppercase tracking-wider text-neutral-secondary font-bold block mb-2">
-                Popular Quick-Add Items:
+              <span className="text-xs font-semibold text-neutral-secondary block mb-2">
+                Quick-Add Items:
               </span>
               <div className="flex flex-wrap gap-2">
                 {POPULAR_CAMPUS_PRESETS.map((p) => (
@@ -412,7 +405,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                     key={p.name}
                     type="button"
                     onClick={() => applyPresetItem(p)}
-                    className="px-2.5 py-1.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-body dark:text-slate-200 hover:border-brand-indigo hover:text-brand-indigo transition-colors flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-body dark:text-slate-200 hover:border-brand-indigo hover:text-brand-indigo transition-colors flex items-center gap-1.5"
                   >
                     <span>+</span>
                     <span>{p.name}</span>
@@ -422,12 +415,12 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               </div>
             </div>
 
-            {/* Repeating Item Cards */}
+            {/* Item Cards */}
             <div className="space-y-4">
               {items.map((item, idx) => (
                 <div
                   key={item.id}
-                  className="p-4 rounded-xl bg-neutral-surface-alt/60 dark:bg-slate-800/40 border border-neutral-border dark:border-slate-700 space-y-3"
+                  className="p-4 sm:p-5 rounded-xl bg-neutral-surface-alt/60 dark:bg-slate-800/40 border border-neutral-border dark:border-slate-700 space-y-3"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-brand-indigo font-mono">
@@ -445,7 +438,6 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                     )}
                   </div>
 
-                  {/* Item Name Input */}
                   <div>
                     <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
                       Item Name *
@@ -455,14 +447,13 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                       required
                       value={item.name}
                       onChange={(e) => handleItemNameChange(idx, e.target.value)}
-                      placeholder="e.g. A4 Ruled Notebook, Cold Coffee, Veg Puff"
+                      placeholder="e.g. A4 Notebook, Cold Coffee, Veg Puff"
                       className="w-full h-11 px-3.5 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-medium text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
                     />
                   </div>
 
-                  {/* Quantity & Estimated Price */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Quantity with +/- Stepper */}
+                    {/* Quantity */}
                     <div>
                       <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
                         Quantity
@@ -471,7 +462,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                         <button
                           type="button"
                           onClick={() => handleItemQuantityChange(idx, -1)}
-                          className="px-3 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
+                          className="px-3.5 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
                         >
                           -
                         </button>
@@ -481,17 +472,17 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                         <button
                           type="button"
                           onClick={() => handleItemQuantityChange(idx, 1)}
-                          className="px-3 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
+                          className="px-3.5 h-full hover:bg-neutral-surface-alt dark:hover:bg-slate-700 text-neutral-ink dark:text-white font-bold"
                         >
                           +
                         </button>
                       </div>
                     </div>
 
-                    {/* Estimated Unit Price */}
+                    {/* Price */}
                     <div>
                       <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                        Estimated Price (₹) *
+                        Estimated Unit Price (₹) *
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-3 text-xs text-neutral-secondary font-mono">₹</span>
@@ -506,7 +497,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                       </div>
                     </div>
 
-                    {/* Category Selector */}
+                    {/* Category */}
                     <div>
                       <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
                         Category
@@ -525,28 +516,26 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                     </div>
                   </div>
 
-                  {/* Notes / Variant */}
                   <div>
                     <label className="block text-[11px] font-semibold text-neutral-secondary mb-1">
-                      Brand / Flavor or Sizing Note (Optional)
+                      Notes (Optional)
                     </label>
                     <input
                       type="text"
                       value={item.notes}
                       onChange={(e) => handleItemNotesChange(idx, e.target.value)}
-                      placeholder="e.g. Chilled bottle, Classmate brand if available"
+                      placeholder="e.g. Cold bottle, brand preference"
                       className="w-full h-9 px-3 rounded-lg bg-white dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-white focus:outline-none"
                     />
                   </div>
                 </div>
               ))}
 
-              {/* Add Item Button */}
               {items.length < maxItemsAllowed && (
                 <button
                   type="button"
                   onClick={addItemRow}
-                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-brand-indigo/30 hover:border-brand-indigo text-brand-indigo dark:text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                  className="w-full py-3 rounded-xl border-2 border-dashed border-brand-indigo/30 hover:border-brand-indigo text-brand-indigo dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Another Item ({items.length}/{maxItemsAllowed})</span>
@@ -554,155 +543,113 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               )}
             </div>
 
-            {/* Estimated Subtotal */}
-            <div className="p-3.5 rounded-xl bg-neutral-surface-alt dark:bg-slate-800 flex items-center justify-between text-xs">
+            {/* Total Estimated Subtotal */}
+            <div className="p-4 rounded-xl bg-neutral-surface-alt dark:bg-slate-800 flex items-center justify-between text-xs">
               <span className="font-semibold text-neutral-secondary">
                 Estimated Items Total:
               </span>
-              <span className="font-mono font-bold text-sm text-neutral-ink dark:text-white">
+              <span className="font-mono font-bold text-base text-neutral-ink dark:text-white">
                 ₹{calculatedItemsTotal}
               </span>
             </div>
 
-            {/* Stepper Next Button */}
+            {/* Continue Button */}
             <div className="pt-4 flex justify-end border-t border-neutral-border dark:border-slate-800">
               <button
                 type="button"
                 disabled={isFirstItemEmpty || !!prohibitedError || isValueExceeded}
                 onClick={() => setCurrentStep(2)}
-                className={`h-11 px-6 rounded-btn text-xs font-bold text-white flex items-center gap-2 transition-all ${
+                className={`h-11 px-7 rounded-btn text-xs font-bold text-white flex items-center gap-2 transition-all ${
                   isFirstItemEmpty || !!prohibitedError || isValueExceeded
                     ? 'bg-neutral-300 dark:bg-slate-700 text-neutral-500 cursor-not-allowed'
                     : 'bg-brand-indigo hover:bg-brand-indigo-dark shadow-sm active:scale-95'
                 }`}
               >
-                <span>Continue to Pickup & Timing</span>
+                <span>Continue to Timing & Pickup</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* ======================================================== */}
-        {/* STEP 2: PROFILE PICKUP DEFAULTS & TIMING PRESETS         */}
-        {/* ======================================================== */}
+        {/* STEP 2: TIMING & PICKUP */}
         {currentStep === 2 && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6 animate-fade-in">
             <div>
               <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-brand-indigo" />
-                <span>Pickup Location & Delivery Timing</span>
+                <Clock className="w-5 h-5 text-brand-indigo" />
+                <span>Delivery Timing & Pickup Location</span>
               </h2>
               <p className="text-xs text-neutral-secondary mt-1">
-                Deliveries take place at official public campus locations. Defaulted to your profile pickup spot.
+                Choose when you need the items and where you'll meet your helper.
               </p>
             </div>
 
-            {/* Timing Presets: ASAP / Tonight / Tomorrow evening */}
+            {/* Delivery Timing Options: Requirement 7 */}
             <div className="space-y-3">
               <label className="text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider block">
-                Needed-By Timeframe (Select Preset) *
+                Delivery Timing (Select One) *
               </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setTimePreset('ASAP')}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
-                    timePreset === 'ASAP'
-                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/30'
-                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm flex items-center gap-1.5">
-                      <Zap className="w-4 h-4 text-amber-600" />
-                      ASAP
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
-                      Rush
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
-                    Within 45 mins. Prioritized in feed for immediate shopping.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTimePreset('Tonight')}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
-                    timePreset === 'Tonight'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/40 border-brand-indigo text-brand-indigo dark:text-indigo-200 ring-2 ring-brand-indigo/30'
-                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-brand-indigo" />
-                      Tonight
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
-                      Pre-Curfew
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
-                    Delivered tonight before 9:00 PM hostel check-in.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setTimePreset('Tomorrow evening')}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
-                    timePreset === 'Tomorrow evening'
-                      ? 'bg-teal-50 dark:bg-teal-950/40 border-brand-teal text-brand-teal dark:text-teal-200 ring-2 ring-brand-teal/30'
-                      : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-brand-teal" />
-                      Tomorrow evening
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
-                      Next Day
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
-                    Tomorrow before 8:00 PM. Perfect for planned study supplies.
-                  </p>
-                </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {DELIVERY_TIMING_OPTIONS.map((opt) => {
+                  const isSelected = timePreset === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setTimePreset(opt.id)}
+                      className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                        isSelected
+                          ? 'bg-indigo-50 dark:bg-indigo-950/40 border-brand-indigo text-brand-indigo dark:text-indigo-200 ring-2 ring-brand-indigo/30 shadow-sm'
+                          : 'border-neutral-border dark:border-slate-700 bg-white dark:bg-slate-800/60 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm flex items-center gap-1.5">
+                          <Clock className={`w-4 h-4 ${isSelected ? 'text-brand-indigo' : 'text-neutral-secondary'}`} />
+                          {opt.label}
+                        </span>
+                        {isSelected && (
+                          <CheckCircle2 className="w-4 h-4 text-brand-indigo shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-neutral-secondary dark:text-slate-400">
+                        {opt.desc}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Profile-Based Pickup Point Selection */}
+            {/* Pickup Location Selection */}
             <div className="space-y-3 pt-4 border-t border-neutral-border dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <div>
                   <label className="text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider block">
-                    Campus Pickup Spot (13 Official Spots) *
+                    Campus Meeting Point *
                   </label>
                   <span className="text-[11px] text-neutral-secondary">
-                    Defaulted to your profile setting. Click below to switch if needed.
+                    Official public pickup spots across campus.
                   </span>
                 </div>
-                <span className="text-[11px] font-mono text-brand-indigo font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60">
+                <span className="text-xs font-mono text-brand-indigo font-bold px-2.5 py-1 rounded bg-indigo-50 dark:bg-indigo-950/60 border border-brand-indigo/20">
                   {pickupPoint}
                 </span>
               </div>
 
-              {/* Search Filter for Pickup Locations */}
+              {/* Location Search Input */}
               <input
                 type="text"
                 value={searchLocation}
                 onChange={(e) => setSearchLocation(e.target.value)}
-                placeholder="Search campus spot (e.g. Canopy, Library, Ananda Vihar)..."
-                className="w-full h-10 px-3.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                placeholder="Search meeting point (e.g. Canopy, Library, Hostel)..."
+                className="w-full h-11 px-3.5 rounded-lg bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs text-neutral-ink dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo"
               />
 
-              {/* 13 Official Locations Selection Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-52 overflow-y-auto p-1">
+              {/* Location Buttons Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
                 {filteredPickupLocations.map((p) => {
                   const isSelected = pickupPoint === p.name;
                   return (
@@ -731,7 +678,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
             {/* Preferred Store Selection */}
             <div className="pt-4 border-t border-neutral-border dark:border-slate-800">
               <label className="block text-xs font-bold text-neutral-ink dark:text-neutral-dark-text uppercase tracking-wider mb-2">
-                Preferred Store / Canteen (Optional)
+                Preferred Store (Optional)
               </label>
               <select
                 value={preferredStore}
@@ -746,7 +693,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               </select>
             </div>
 
-            {/* Stepper Navigation */}
+            {/* Navigation Buttons */}
             <div className="pt-4 flex items-center justify-between border-t border-neutral-border dark:border-slate-800">
               <button
                 type="button"
@@ -760,7 +707,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrentStep(3)}
-                className="h-11 px-6 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-transform active:scale-95"
+                className="h-11 px-7 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-transform active:scale-95"
               >
                 <span>Continue to Review</span>
                 <ArrowRight className="w-4 h-4" />
@@ -769,33 +716,31 @@ export const PostRequest: React.FC<PostRequestProps> = ({
           </div>
         )}
 
-        {/* ======================================================== */}
-        {/* STEP 3: FINAL REVIEW & ONE CONFIRMATION ACTION           */}
-        {/* ======================================================== */}
+        {/* STEP 3: REVIEW & CONFIRM */}
         {currentStep === 3 && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6 animate-fade-in">
             <div>
               <h2 className="font-heading font-bold text-xl text-neutral-ink dark:text-neutral-dark-text flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Review Your Errand Request</span>
+                <span>Review Your Request</span>
               </h2>
               <p className="text-xs text-neutral-secondary mt-1">
-                Confirm your request details below. Once posted, it will be visible to nearby campus helpers.
+                Confirm your order details. Your request will be shared with student helpers nearby.
               </p>
             </div>
 
-            {/* Errand Summary Card */}
+            {/* Order Summary Card */}
             <div className="p-5 rounded-2xl bg-neutral-surface-alt/70 dark:bg-slate-800/70 border border-neutral-border dark:border-slate-700 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-neutral-border dark:border-slate-700">
                 <span className="text-xs font-bold uppercase tracking-wider text-neutral-secondary">
-                  Order Summary
+                  Order Items
                 </span>
                 <span className="text-xs font-semibold text-brand-indigo font-mono">
-                  {items.filter((it) => it.name.trim()).length} Item(s)
+                  {items.filter((it) => it.name.trim()).length} item(s)
                 </span>
               </div>
 
-              {/* Items Breakdown */}
+              {/* Items List */}
               <div className="space-y-2.5">
                 {items
                   .filter((it) => it.name.trim())
@@ -814,7 +759,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                           </span>
                         )}
                         <span className="text-[10px] text-neutral-placeholder font-mono">
-                          Category: {it.category}
+                          {it.category}
                         </span>
                       </div>
                       <span className="font-mono font-bold text-neutral-ink dark:text-white text-sm shrink-0">
@@ -824,47 +769,47 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                   ))}
               </div>
 
-              {/* Logistics Details */}
+              {/* Delivery Info */}
               <div className="pt-3 border-t border-neutral-border dark:border-slate-700 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-secondary flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-brand-indigo" />
-                    Pickup Meeting Spot:
+                    <Clock className="w-3.5 h-3.5 text-brand-indigo" />
+                    Delivery Time:
                   </span>
-                  <span className="font-bold text-neutral-ink dark:text-white text-right">
+                  <span className="font-bold text-neutral-ink dark:text-white">
+                    {timePreset}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-secondary flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-brand-indigo" />
+                    Pickup Spot:
+                  </span>
+                  <span className="font-bold text-neutral-ink dark:text-white">
                     {pickupPoint}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-secondary flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                    Target Timeframe:
+                    <Store className="w-3.5 h-3.5 text-neutral-placeholder" />
+                    Store:
                   </span>
-                  <span className="font-bold text-neutral-ink dark:text-white text-right">
-                    {getPresetLabel(timePreset)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-secondary flex items-center gap-1.5">
-                    <Store className="w-3.5 h-3.5 text-teal-600" />
-                    Preferred Store:
-                  </span>
-                  <span className="font-semibold text-neutral-ink dark:text-white text-right">
+                  <span className="font-semibold text-neutral-ink dark:text-white">
                     {preferredStore}
                   </span>
                 </div>
               </div>
 
-              {/* Total Estimated Cost Bar - No invented fee data */}
+              {/* Estimated Total Bar */}
               <div className="pt-3 border-t border-neutral-border dark:border-slate-700 flex items-center justify-between font-mono">
                 <div>
                   <span className="text-xs text-neutral-secondary block font-sans">
                     Estimated Items Total:
                   </span>
                   <span className="text-[11px] text-neutral-placeholder font-sans">
-                    (Direct UPI payment once store prices are confirmed)
+                    (UPI payment to helper upon store price confirmation)
                   </span>
                 </div>
                 <span className="font-heading font-extrabold text-2xl text-brand-indigo">
@@ -873,18 +818,13 @@ export const PostRequest: React.FC<PostRequestProps> = ({
               </div>
             </div>
 
-            {/* Transparent Protocol Notice (No invented fees) */}
-            <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/50 dark:border-indigo-800/30 text-xs space-y-2">
-              <div className="flex items-center gap-1.5 font-bold text-brand-indigo">
-                <ShieldCheck className="w-4 h-4" />
-                <span>No Platform Fees • Direct UPI Payment</span>
-              </div>
-              <p className="text-[11px] text-neutral-secondary dark:text-slate-400 leading-relaxed">
-                You'll pay your helper directly via UPI once store prices are confirmed in the order chat. NeedIt takes ₹0 platform fee.
-              </p>
+            {/* Platform Guarantee */}
+            <div className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/30 text-xs flex items-center gap-2 text-brand-indigo">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>₹0 Platform Fee. You pay your helper directly via UPI once store prices are confirmed in chat.</span>
             </div>
 
-            {/* Stepper Navigation with ONE Final Confirmation Action */}
+            {/* Final Action Buttons */}
             <div className="pt-4 flex items-center justify-between border-t border-neutral-border dark:border-slate-800">
               <button
                 type="button"
@@ -892,21 +832,19 @@ export const PostRequest: React.FC<PostRequestProps> = ({
                 className="h-11 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink flex items-center gap-1.5"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Timing</span>
+                <span>Back</span>
               </button>
 
-              {/* Single Confirmation Action */}
               <button
                 type="button"
                 onClick={handleSubmitOrder}
-                className="h-12 px-7 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
+                className="h-12 px-8 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-bold text-sm shadow-md transition-transform active:scale-95 flex items-center gap-2"
               >
-                <span>Confirm & Post Order →</span>
+                <span>Confirm & Post Request →</span>
               </button>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

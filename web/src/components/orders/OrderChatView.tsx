@@ -542,7 +542,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto flex flex-col h-[calc(100vh-4rem)] bg-neutral-page-bg dark:bg-neutral-dark-page">
+    <div className="w-full max-w-4xl mx-auto flex flex-col h-[calc(100vh-4rem)] bg-neutral-page-bg dark:bg-neutral-dark-page">
       {/* 1. COMPACT STICKY STATUS HEADER */}
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-neutral-dark-card/95 backdrop-blur-md border-b border-neutral-border dark:border-neutral-dark-border px-4 py-2.5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
