@@ -83,7 +83,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
 
   const navigateForRole = (resolved: UserRole) => {
     if (resolved === 'helper') onNavigate('/app/helper/feed');
-    else if (resolved === 'club') onNavigate('/club');
+    else if (resolved === 'club') onNavigate('/app/admin');
     else onNavigate('/app/home');
   };
 
@@ -182,29 +182,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 </div>
               </button>
 
-              {/* Option 3: Admin */}
-              <button
-                type="button"
-                onClick={() => handleSelectRoleAndProceed('club')}
-                className="w-full p-4 rounded-xl border-2 border-purple-200 dark:border-purple-900/60 hover:border-purple-600 dark:hover:border-purple-500 bg-purple-50/40 dark:bg-purple-950/20 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-all text-left flex items-start gap-4 group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Shield className="w-6 h-6" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-heading font-bold text-sm sm:text-base text-purple-900 dark:text-purple-200">
-                      Campus Admin
-                    </h3>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
-                      Only 3 Admins
-                    </span>
-                  </div>
-                  <p className="text-xs text-neutral-secondary mt-1">
-                    Council safety moderation, prohibited item audits, and student dispute resolution.
-                  </p>
-                </div>
-              </button>
             </div>
 
           </div>
@@ -237,19 +214,6 @@ export const AuthPages: React.FC<AuthPagesProps> = ({
                 Active: {role === 'helper' ? 'Delivery Agent' : role === 'club' ? 'Admin' : 'Customer'}
               </span>
             </div>
-
-            {/* Admin Restriction Banner */}
-            {role === 'club' && (
-              <div className="p-3 rounded-card bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40 text-xs text-purple-900 dark:text-purple-200 flex items-start gap-2">
-                <Lock className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <div className="font-semibold">Campus Admin Whitelist Enforced</div>
-                  <div className="text-[11px] text-purple-800 dark:text-purple-300">
-                    Only authorized campus administrators can access this interface.
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Google Workspace sign-in — the only way in */}
             <div className="space-y-4">

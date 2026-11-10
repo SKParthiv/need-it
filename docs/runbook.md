@@ -42,7 +42,7 @@ jobs, limits, and incidents. Historical long-forms live in git history.
 | --- | --- |
 | `VITE_API_URL` | `https://<render-domain>/api` |
 | `VITE_GOOGLE_CLIENT_ID` | same client ID |
-| `VITE_ADMIN_EMAILS` | the founder roll-number email (comma-separated for more) |
+| `VITE_GOOGLE_CLIENT_ID` | Google Identity Services client ID for Workspace sign-in |
 
 ## Every deploy after that
 

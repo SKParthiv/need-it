@@ -44,7 +44,7 @@ import { ProfilePage } from './pages/shared/ProfilePage';
 import { ReportProblemPage } from './pages/shared/ReportProblemPage';
 
 // Club Console
-import { ClubConsole } from './pages/club/ClubConsole';
+import { AdminPortal } from './pages/staff/AdminPortal';
 
 // Special Screens
 import { SpecialScreens } from './pages/special/SpecialScreens';
@@ -106,14 +106,13 @@ const AppContent: React.FC = () => {
     currentPath.startsWith('/app/policy') ||
     currentPath.startsWith('/app/role');
 
-  const isClubPage = currentPath.startsWith('/club');
+  const isAdminPage = currentPath === '/app/admin';
   const isSpecialPage = currentPath === '/404' || currentPath.startsWith('/special/');
 
   // Determine user initials for avatar
-  const userInitials =
-    role === 'club'
-      ? 'CA'
-      : currentUser.name
+  const userInitials = currentUser.isStaff
+    ? 'ST'
+    : currentUser.name
           .split(' ')
           .map((n) => n[0])
           .join('')
@@ -156,9 +155,9 @@ const AppContent: React.FC = () => {
     if (currentPath === '/app/policy') return <OnboardingFlow step="policy" onNavigate={navigate} onSetRole={setRole} />;
     if (currentPath === '/app/role') return <OnboardingFlow step="role" onNavigate={navigate} onSetRole={setRole} />;
 
-    // Strict Interface Isolation Guard:
-    // Ordinary users cannot directly access another role's interface routes.
-    // Developer Super Admin (first entry in VITE_ADMIN_EMAILS) can access all interfaces.
+    if (currentPath === '/app/admin') return <AdminPortal />;
+
+    // Client checks are UX only; staff API endpoints enforce authorization.
     if (!isSuperAdmin) {
       const isCustomerRoute =
         currentPath === '/app/home' ||
@@ -166,15 +165,10 @@ const AppContent: React.FC = () => {
         currentPath.startsWith('/app/orders') ||
         currentPath === '/app/history';
       const isHelperRoute = currentPath.startsWith('/app/helper');
-      const isClubRoute = currentPath.startsWith('/club');
-
       if (isCustomerRoute && role !== 'customer') {
         return <SpecialScreens type="access-denied" onNavigate={navigate} />;
       }
       if (isHelperRoute && role !== 'helper') {
-        return <SpecialScreens type="access-denied" onNavigate={navigate} />;
-      }
-      if (isClubRoute && role !== 'club') {
         return <SpecialScreens type="access-denied" onNavigate={navigate} />;
       }
     }
@@ -215,23 +209,7 @@ const AppContent: React.FC = () => {
     if (currentPath === '/app/ask') return role === 'helper' ? <MyJobs onNavigate={navigate} /> : <MyOrders onNavigate={navigate} />;
     if (currentPath === '/app/report') return <ReportProblemPage onNavigate={navigate} />;
 
-    // 6. Club Console
-    if (currentPath === '/club') return <ClubConsole section="dashboard" onNavigate={navigate} />;
-    if (currentPath === '/club/reports') return <ClubConsole section="reports" onNavigate={navigate} />;
-    if (currentPath.startsWith('/club/reports/')) {
-      const id = currentPath.split('/')[3];
-      return <ClubConsole section="reports" reportId={id} onNavigate={navigate} />;
-    }
-    if (currentPath === '/club/users') return <ClubConsole section="users" onNavigate={navigate} />;
-    if (currentPath === '/club/requests') return <ClubConsole section="requests" onNavigate={navigate} />;
-    if (currentPath === '/club/rules') return <ClubConsole section="rules" onNavigate={navigate} />;
-    if (currentPath === '/club/pickup-points') return <ClubConsole section="pickup-points" onNavigate={navigate} />;
-    if (currentPath === '/club/shops') return <ClubConsole section="shops" onNavigate={navigate} />;
-    if (currentPath === '/club/broadcast') return <ClubConsole section="broadcast" onNavigate={navigate} />;
-    if (currentPath === '/club/insights') return <ClubConsole section="insights" onNavigate={navigate} />;
-    if (currentPath === '/club/payouts') return <ClubConsole section="payouts" onNavigate={navigate} />;
-
-    // 7. Special Error Screens
+    // 6. Special Error Screens
     if (currentPath === '/404') return <SpecialScreens type="404" onNavigate={navigate} />;
     if (currentPath === '/special/access-denied') return <SpecialScreens type="access-denied" onNavigate={navigate} />;
     if (currentPath === '/special/session-expired') return <SpecialScreens type="session-expired" onNavigate={navigate} />;
@@ -255,12 +233,12 @@ const AppContent: React.FC = () => {
         />
       ) : (
         <AppHeader
-          role={isClubPage ? 'club' : role}
+          role={role}
           onRoleChange={(newRole) => {
             setRole(newRole);
             if (newRole === 'customer') navigate('/app/home');
             else if (newRole === 'helper') navigate('/app/helper/feed');
-            else if (newRole === 'club') navigate('/club');
+            else if (newRole === 'club') navigate('/app/admin');
           }}
           onNavigate={navigate}
           isDark={isDark}
@@ -272,9 +250,9 @@ const AppContent: React.FC = () => {
 
       {/* Main Body with Sidebar (for App/Club views) */}
       <div className="flex-1 flex w-full">
-        {!isPublicPage && !isOnboardingPage && !isSpecialPage && (
+        {!isPublicPage && !isOnboardingPage && !isSpecialPage && !isAdminPage && (
           <AppSidebar
-            role={isClubPage ? 'club' : role}
+            role={role}
             currentPath={currentPath}
             onNavigate={navigate}
           />
@@ -291,7 +269,7 @@ const AppContent: React.FC = () => {
       {isPublicPage && <Footer onNavigate={navigate} />}
 
       {/* App Mobile Bottom Tab Bar (Customer vs Helper tabs) */}
-      {!isPublicPage && !isOnboardingPage && !isClubPage && !isSpecialPage && (
+      {!isPublicPage && !isOnboardingPage && !isAdminPage && !isSpecialPage && (
         <AppBottomNav
           role={role}
           currentPath={currentPath}

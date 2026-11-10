@@ -62,8 +62,13 @@ async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): P
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearStoredAuth();
+    }
     const errorMsg = data.detail || (typeof data === 'object' ? JSON.stringify(data) : 'API Error');
-    throw new Error(errorMsg);
+    const error = new Error(errorMsg);
+    Object.assign(error, { status: response.status, data });
+    throw error;
   }
 
   return data as T;
@@ -284,14 +289,19 @@ export const api = {
       item_cost?: number;
       helper_fee?: number;
       total?: number;
-        // Active provider ("manual" | "razorpay_base") — drives which pay UI
-        // renders: client-composed UPI QR vs gateway payment link.
-        provider?: string;
+      provider?: string;
+      upi_deep_link?: string;
+      helper_upi_id?: string;
     }>(`/orders/${orderId}/payment-status/`);
   },
 
-  async pay(orderId: string | number, helperFee = 30) {
-    return apiFetch<{ status: string; total: number; paymentUrl?: string | null }>(`/orders/${orderId}/pay/`, {
+  async pay(orderId: string | number, helperFee: number) {
+    return apiFetch<{
+      status: string;
+      total: number;
+      upiDeepLink?: string;
+      helperUpiId?: string;
+    }>(`/orders/${orderId}/pay/`, {
       method: 'POST',
       body: JSON.stringify({ helperFee }),
     });

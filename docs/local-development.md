@@ -20,7 +20,7 @@ python manage.py runserver        # http://127.0.0.1:8000
 # web client (second terminal)
 cd web
 npm install
-Copy-Item .env.example .env       # set VITE_ADMIN_EMAILS for admin-demo logins
+Copy-Item .env.example .env       # optionally set VITE_GOOGLE_CLIENT_ID
 npm run dev                       # http://localhost:3000
 ```
 

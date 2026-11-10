@@ -37,7 +37,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         {/* Left: Brand Logo & Context */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate(isHelper ? '/app/helper/feed' : isClub ? '/club' : '/app/home')}
+            onClick={() => onNavigate(isHelper ? '/app/helper/feed' : isClub ? '/app/admin' : '/app/home')}
             className="focus:outline-none"
             aria-label="App Home"
           >
@@ -83,18 +83,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => onRoleChange('club')}
-                className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full transition-all ${
-                  role === 'club'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-neutral-secondary dark:text-neutral-dark-secondary hover:text-neutral-ink'
-                }`}
+                onClick={() => onNavigate('/app/admin')}
+                className="flex items-center gap-1 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-full text-neutral-secondary dark:text-neutral-dark-secondary hover:text-neutral-ink"
               >
-                <span>Admin</span>
+                <span>Staff portal</span>
               </button>
             </div>
             <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-              Dev Mode
+              Staff
             </span>
           </div>
         ) : (

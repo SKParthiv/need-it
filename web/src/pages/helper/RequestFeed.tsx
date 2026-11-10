@@ -8,7 +8,6 @@ import {
   Calendar,
   Store,
   ChevronRight,
-  Sparkles,
   ShoppingBag
 } from 'lucide-react';
 import { StatusChip } from '../../components/common/StatusChip';
@@ -19,43 +18,10 @@ interface RequestFeedProps {
 }
 
 export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
-  const { orders, addOrder } = useWebApp();
+  const { orders } = useWebApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedSize, setSelectedSize] = useState<string>('All');
   const [urgentOnly, setUrgentOnly] = useState(false);
-  const [newestOrderId, setNewestOrderId] = useState<string | null>(null);
-
-  // Section 10.4: Simulate new incoming request in feed
-  const simulateIncomingRequest = () => {
-    const newOrd = addOrder({
-      customerName: 'Karthik R.',
-      customerAlias: 'Student #5120',
-      customerHostel: 'Hostel Block C',
-      pickupPoint: 'Hostel Block C Lobby',
-      category: 'Food',
-      items: [
-        {
-          id: `item-${Date.now()}`,
-          name: 'Hot Paneer Roll + Maaza',
-          category: 'Food',
-          quantity: 2,
-          expectedPrice: 40,
-          status: 'pending'
-        }
-      ],
-      neededBy: 'Today, 8:45 PM',
-      itemCost: 80,
-      helperFee: 30,
-      totalCost: 110,
-      isUrgent: true,
-      isWaitingLong: false,
-      status: 'open',
-      sizeTag: 'S',
-      suggestedStore: 'KC Canteen'
-    });
-    setNewestOrderId(newOrd.id);
-  };
-
   // Filter only OPEN requests (locked and completed are hidden per Section 7.1)
   const openRequests = orders.filter((o) => o.status === 'open');
 
@@ -85,17 +51,8 @@ export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
           </p>
         </div>
 
-        {/* Action Buttons: Availability & Section 10.4 Live Incoming Order Simulation */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={simulateIncomingRequest}
-            title="Demonstrate Section 10.4: Slides in from top with brief indigo-tint highlight"
-            className="h-10 px-3.5 rounded-btn bg-brand-indigo-light text-brand-indigo dark:bg-brand-indigo/20 dark:text-brand-indigo-darkmode border border-brand-indigo/30 text-xs font-semibold flex items-center gap-1.5 hover:bg-brand-indigo/20 active:scale-95 transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-brand-indigo" />
-            <span>Simulate Live Order (+1)</span>
-          </button>
-
           <button
             onClick={() => onNavigate('/app/helper/availability')}
             className="h-10 px-4 rounded-btn bg-brand-teal-light text-brand-teal dark:bg-brand-teal/20 dark:text-emerald-300 border border-brand-teal/30 text-xs font-semibold flex items-center gap-2 hover:bg-brand-teal/15 transition-colors"
@@ -188,7 +145,7 @@ export const RequestFeed: React.FC<RequestFeedProps> = ({ onNavigate }) => {
                       key={req.id}
                       onClick={() => onNavigate(`/app/helper/feed/${req.id}`)}
                       className={`p-5 rounded-card bg-white dark:bg-neutral-dark-card border shadow-e1 hover:shadow-e2 transition-all cursor-pointer space-y-3 group ${
-                        req.id === newestOrderId ? 'new-request-enter border-brand-indigo ring-2 ring-brand-indigo/30' : ''
+                        ''
                       } ${
                         req.isUrgent
                           ? 'border-l-4 border-l-semantic-danger border-neutral-border dark:border-slate-800'

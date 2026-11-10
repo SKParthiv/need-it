@@ -8,19 +8,7 @@ import {
   ChatMessage,
   AppNotification,
 } from '../types';
-import { api, getStoredToken, getStoredUser } from '../services/api';
-
-// Admin emails come from web/.env (VITE_ADMIN_EMAILS, comma-separated) so the
-// repo does not publish real student addresses.
-// NOTE: this gates the UI only — it is cosmetic. Real admin enforcement must
-// be server-side (backend phase 10). Never trust this list for authorization.
-const envAdminEmails = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
-  .split(',')
-  .map((e: string) => e.trim())
-  .filter(Boolean);
-
-export const AUTHORIZED_ADMIN_EMAILS: string[] = envAdminEmails;
-export const SUPER_ADMIN_EMAIL: string = AUTHORIZED_ADMIN_EMAILS[0] ?? '';
+import { api, getStoredToken } from '../services/api';
 
 interface WebAppContextType {
   role: UserRole;
@@ -33,9 +21,9 @@ interface WebAppContextType {
     pickupPoint: string;
     isVerified: boolean;
     upiId?: string;
+    isStaff: boolean;
   };
   isSuperAdmin: boolean;
-  authorizedAdminEmails: string[];
   login: (email: string, password: string) => Promise<UserRole>;
   googleLogin: (idToken: string, role: 'customer' | 'helper') => Promise<UserRole>;
   register: (data: {
@@ -49,7 +37,7 @@ interface WebAppContextType {
   updateProfile: (data: { upi_id?: string; hostel_block?: string; pickup_point?: string }) => Promise<void>;
   orders: Order[];
   refreshOrders: () => Promise<void>;
-  addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'handoverCode'>) => Order;
+  addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'handoverCode'>) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, extra?: Partial<Order>) => Promise<void>;
   getOrderById: (orderId: string) => Order | undefined;
   chats: Record<string, ChatConversation>;
@@ -74,6 +62,7 @@ const DEFAULT_USERS = {
     hostel: '',
     pickupPoint: '',
     isVerified: false,
+    isStaff: false,
   },
 };
 
@@ -135,7 +124,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [chats, setChats] = useState<Record<string, ChatConversation>>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  const isSuperAdmin = currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+  const isSuperAdmin = currentUser.isStaff;
 
   // Load orders from backend
   const refreshOrders = useCallback(async () => {
@@ -155,23 +144,38 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setOrders(mapped);
       }
     } catch (err) {
-      console.warn('Backend orders refresh fallback:', err);
+      if ((err as { status?: number })?.status !== 401) {
+        console.error('Backend orders refresh failed:', err);
+      }
     }
   }, [role]);
 
   // Initial auth restoration & periodic sync
   useEffect(() => {
-    const user = getStoredUser();
-    if (user && user.email) {
-      applyUser(user);
-    }
+    const restoreSession = async () => {
+      if (!getStoredToken()) return;
+      try {
+        applyUser(await api.getMe());
+      } catch {
+        setCurrentUser(DEFAULT_USERS.customer);
+        setRole('customer');
+      }
+    };
+    void restoreSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    refreshOrders();
-    const timer = setInterval(refreshOrders, 5000);
-    return () => clearInterval(timer);
+    const sync = () => {
+      if (!document.hidden) void refreshOrders();
+    };
+    sync();
+    const timer = setInterval(sync, 5000);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', sync);
+    };
   }, [refreshOrders]);
 
   // Notifications: real backend feed, refreshed on a slower cadence than orders.
@@ -194,23 +198,30 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         );
       }
     } catch (err) {
-      console.warn('Backend notifications refresh fallback:', err);
+      if ((err as { status?: number })?.status !== 401) {
+        console.error('Backend notifications refresh failed:', err);
+      }
     }
   }, []);
 
   useEffect(() => {
-    refreshNotifications();
-    const timer = setInterval(refreshNotifications, 15000);
-    return () => clearInterval(timer);
+    const sync = () => {
+      if (!document.hidden) void refreshNotifications();
+    };
+    sync();
+    const timer = setInterval(sync, 15000);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', sync);
+    };
   }, [refreshNotifications]);
 
   // The backend owns identity: password check, token issue, role assignment.
   // The UI only resolves which portal to show from the user the API returns.
   const applyUser = (user: any): UserRole => {
     const email = (user.email || '').toLowerCase();
-    const resolved: UserRole = AUTHORIZED_ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(email)
-      ? 'club'
-      : user.role === 'helper'
+    const resolved: UserRole = user.role === 'helper'
       ? 'helper'
       : 'customer';
     setRole(resolved);
@@ -222,6 +233,7 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       pickupPoint: user.pickup_point || 'Boys’ Hostel Area',
       isVerified: !!user.is_verified_student,
       upiId: user.upi_id || '',
+      isStaff: !!user.is_staff,
     });
     return resolved;
   };
@@ -260,45 +272,22 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setRole('customer');
   };
 
-  const addOrder = (orderData: Omit<Order, 'id' | 'createdAt' | 'handoverCode'>): Order => {
-    const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
-    const tempId = `ORD-${Date.now()}`;
-    const newOrder: Order = {
-      ...orderData,
-      id: tempId,
-      createdAt: 'Just now',
-      handoverCode: randomCode,
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-
-    // Send to backend asynchronously
-    (async () => {
-      try {
-        const payload = {
-          neededBy: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
-          pickupPoint: orderData.pickupPoint,
-          isUrgent: orderData.isUrgent,
-          expectedTotal: orderData.itemCost || 100,
-          items: orderData.items.map((it) => ({
-            name: it.name,
-            quantity: it.quantity,
-            expectedPrice: it.expectedPrice,
-            notes: it.notes || '',
-          })),
-        };
-        const created = await api.createRequest(payload);
-        if (created && created.id) {
-          const mapped = mapBackendRequestToOrder(created);
-          setOrders((prev) => prev.map((o) => (o.id === tempId ? mapped : o)));
-          newOrder.id = String(created.id);
-        }
-      } catch (err) {
-        console.warn('Backend create request fallback:', err);
-      }
-    })();
-
-    return newOrder;
+  const addOrder = async (orderData: Omit<Order, 'id' | 'createdAt' | 'handoverCode'>): Promise<Order> => {
+    const created = await api.createRequest({
+      neededBy: new Date(Date.now() + 4 * 3600 * 1000).toISOString(),
+      pickupPoint: orderData.pickupPoint,
+      isUrgent: orderData.isUrgent,
+      expectedTotal: orderData.itemCost,
+      items: orderData.items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        expectedPrice: item.expectedPrice,
+        notes: item.notes || '',
+      })),
+    });
+    const mapped = mapBackendRequestToOrder(created);
+    setOrders((prev) => [mapped, ...prev.filter((order) => order.id !== mapped.id)]);
+    return mapped;
   };
 
   const updateOrderStatus = async (
@@ -306,10 +295,6 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     status: OrderStatus,
     extra?: Partial<Order>
   ) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status, ...extra } : o))
-    );
-
     const numericId = parseInt(orderId, 10);
     if (!isNaN(numericId)) {
       try {
@@ -325,10 +310,10 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             await api.confirmHandover(numericId, code);
           }
         }
-      } catch (err) {
-        console.warn(`Backend update status error for ${orderId}:`, err);
+      } catch (error) {
+        throw error;
       }
-      refreshOrders();
+      await refreshOrders();
     }
   };
 
@@ -353,15 +338,10 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const numOrderId = parseInt(orderId, 10);
     if (!isNaN(numOrderId)) {
       const resp = await api.pay(numOrderId, fee);
-      if (resp.paymentUrl) {
-        // Gateway mode (merchant of record): the customer pays the Razorpay
-        // link; the signed webhook marks the payment held — no manual confirm.
-        window.open(resp.paymentUrl, '_blank', 'noopener,noreferrer');
-      } else {
-        // Manual UPI pilot: both sides still confirm the out-of-band transfer.
-        await api.confirmPayment(numOrderId);
+      if (resp.upiDeepLink) {
+        window.open(resp.upiDeepLink, '_blank', 'noopener,noreferrer');
       }
-      refreshOrders();
+      await refreshOrders();
     }
   };
 
@@ -443,7 +423,6 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setRole,
         currentUser,
         isSuperAdmin,
-        authorizedAdminEmails: AUTHORIZED_ADMIN_EMAILS,
         login,
         googleLogin,
         register,
