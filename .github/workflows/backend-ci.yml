@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - main
-      - "backend/**"
     paths:
       - "backend/**"
       - "docs/**"
@@ -47,4 +46,4 @@ jobs:
         run: python manage.py makemigrations --check --dry-run
 
       - name: Run backend tests
-        run: python manage.py test apps.users apps.orders apps.payments apps.chat
+        run: python manage.py test

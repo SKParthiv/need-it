@@ -101,7 +101,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
     }
   };
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
     const validItems = items.filter((it) => it.name.trim().length > 0);
     const orderItems = validItems.length > 0 ? validItems : items;
 
@@ -110,7 +110,7 @@ export const PostRequest: React.FC<PostRequestProps> = ({
       0
     );
 
-    const createdOrder = addOrder({
+    const createdOrder = await addOrder({
       customerName: currentUser.name,
       customerAlias: currentUser.alias || 'Student Requester',
       customerHostel: currentUser.hostel || 'Hostel Block A',
@@ -137,7 +137,6 @@ export const PostRequest: React.FC<PostRequestProps> = ({
     });
 
     onPostSuccess(createdOrder.id);
-    onNavigate(`/app/orders/${createdOrder.id}`);
   };
 
   return (

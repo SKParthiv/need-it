@@ -136,6 +136,8 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     helper_fee?: number;
     total?: number;
     provider?: string;
+    upi_deep_link?: string;
+    helper_upi_id?: string;
   }>({ status: 'none' });
   const [isPaying, setIsPaying] = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
@@ -169,6 +171,7 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   const paymentCard = [...liveMessages].reverse().find(
     (m) => m.card && m.card.type === 'payment_card'
   )?.card;
+  const isGateway = false;
 
   useEffect(() => {
     scrollToBottom();
@@ -199,24 +202,6 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
       isMounted = false;
     };
   }, [orderId, order?.status]);
-
-  // Merchant-of-record mode (D9): the gateway's signed webhook marks the
-  // payment held — neither side taps "confirm". Poll while we wait for it.
-  const isGateway = Boolean(
-    paymentData.provider && paymentData.provider.startsWith('razorpay')
-  );
-  useEffect(() => {
-    if (!isGateway || paymentData.status !== 'pending') return;
-    const timer = setInterval(async () => {
-      const numId = parseInt(orderId, 10);
-      if (isNaN(numId)) return;
-      try {
-        const res = await api.getPaymentStatus(numId);
-        if (res) setPaymentData((prev) => ({ ...prev, ...res }));
-      } catch { /* transient — next tick retries */ }
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [isGateway, paymentData.status, orderId]);
 
   // Clean up preview object URL
   useEffect(() => {
@@ -361,12 +346,6 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
     setPaymentError('');
     try {
       await payOrder(order.id, paymentCard?.suggestedFee ?? order.helperFee);
-      // Manual UPI mode: customer attests "I've paid" (the payment turns
-      // held only when the helper also confirms). Gateway mode: the signed
-      // webhook is the only confirmer — the app never takes our word for it.
-      if (!isGateway) {
-        await confirmPayment(order.id);
-      }
       setPaymentData((prev) => ({ ...prev, status: 'pending' }));
       await refreshOrders();
     } catch (err: any) {
@@ -450,19 +429,19 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
   // No card → no pay UI. Never invent a UPI ID. The client composes the
   // deep link: amount = item cost + the customer's chosen fee (card bounds
   // apply; the payment-status response is authoritative once pay happened).
-  const serverUpiId = paymentCard?.upiId || '';
+  const serverUpiId = paymentData.helper_upi_id || paymentCard?.upiId || '';
   const payableAmount =
     paymentData.total ??
     ((paymentData.item_cost ?? paymentCard?.itemCost ?? actGoodsTotal) +
       (paymentData.helper_fee ?? paymentCard?.suggestedFee ?? order.helperFee));
 
-  const upiDeepLink = serverUpiId
+  const upiDeepLink = paymentData.upi_deep_link || (serverUpiId
     ? `upi://pay?pa=${encodeURIComponent(serverUpiId)}&pn=${encodeURIComponent(
         order.helperName || 'NeedIt Helper'
       )}&am=${payableAmount}&cu=INR&tn=${encodeURIComponent(
         paymentCard?.note || `Need It order #${order.id}`
       )}`
-    : '';
+    : '');
 
   const finalTotal = payableAmount;
 
@@ -907,7 +886,6 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             {/* Helper UPI ID with 1-click copy (manual UPI mode only — in
                 gateway mode the customer pays the platform's link and never
                 sees the helper's UPI) */}
-            {!isGateway && (
             <div className="p-3 rounded-card bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 flex items-center justify-between gap-2 text-xs">
               <div className="min-w-0">
                 <span className="text-[10px] text-neutral-secondary block">Helper UPI Address</span>
@@ -931,10 +909,9 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
                 </button>
               )}
             </div>
-            )}
 
-            {/* Client-Side QR Code & UPI Deep-Link Action (manual mode only) */}
-            {!isGateway && (upiDeepLink ? (
+            {/* Server-provided UPI deep link and QR */}
+            {upiDeepLink ? (
               <div className="flex flex-col items-center justify-center space-y-3 pt-1">
                 <div className="p-3 bg-white rounded-2xl shadow-md border border-neutral-border inline-block">
                   <ClientQrCode value={upiDeepLink} size={170} />
@@ -955,12 +932,6 @@ export const OrderChatView: React.FC<OrderChatViewProps> = ({
             ) : (
               <div className="p-3 text-center text-xs text-neutral-secondary bg-neutral-surface-alt dark:bg-slate-800 rounded-card">
                 Note: Server did not return a helper UPI ID or deep link for this order. Enter the UPI handle directly in your UPI app.
-              </div>
-            ))}
-
-            {isGateway && paymentData.status === 'none' && (
-              <div className="p-3 text-center text-xs text-neutral-secondary bg-neutral-surface-alt dark:bg-slate-800 rounded-card">
-                Secure Razorpay link (UPI, cards, netbanking). The platform holds your payment and releases it to the helper only after the handover OTP.
               </div>
             )}
 
