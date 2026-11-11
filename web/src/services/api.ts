@@ -33,6 +33,31 @@ export const getStoredUser = () => {
   }
 };
 
+export class ApiError extends Error {
+  status: number;
+  data: any;
+  isForbidden?: boolean;
+  reason?: string;
+  appealHint?: string;
+
+  constructor(status: number, data: any, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+    if (status === 403) {
+      this.isForbidden = true;
+      this.reason =
+        data?.detail ||
+        data?.reason ||
+        'This action is blocked by campus safety policy or verified student requirements.';
+      this.appealHint =
+        data?.appeal_hint ||
+        'If you believe this restriction is an error, please file an appeal through the Report a Problem page.';
+    }
+  }
+}
+
 async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
@@ -66,9 +91,7 @@ async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): P
       clearStoredAuth();
     }
     const errorMsg = data.detail || (typeof data === 'object' ? JSON.stringify(data) : 'API Error');
-    const error = new Error(errorMsg);
-    Object.assign(error, { status: response.status, data });
-    throw error;
+    throw new ApiError(response.status, data, errorMsg);
   }
 
   return data as T;
@@ -211,6 +234,15 @@ export const api = {
     return apiFetch<{ cloudName: string; apiKey: string; timestamp: number; folder: string; signature: string }>(
       '/uploads/signature/'
     );
+  },
+
+  async isPhotoUploadAvailable(): Promise<boolean> {
+    try {
+      const sig = await this.getUploadSignature();
+      return Boolean(sig && sig.apiKey && sig.signature);
+    } catch {
+      return false;
+    }
   },
 
   /** Direct browser→Cloudinary signed upload. Returns the secure_url to attach

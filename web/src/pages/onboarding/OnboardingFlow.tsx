@@ -27,15 +27,16 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
   onSetRole
 }) => {
   // Step 1: Verify state
-  const [email, setEmail] = useState('125004092@sastra.ac.in');
+  const [email, setEmail] = useState('student@sastra.ac.in');
   const [otp, setOtp] = useState(['4', '8', '2', '1', '9', '0']);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Step 2: Profile setup state
+  // Step 2: Profile setup state (Progressive disclosure per Issue #30)
+  const [profileStage, setProfileStage] = useState<1 | 2>(1);
   const [name, setName] = useState('Aarav Sharma');
   const [userType, setUserType] = useState<'hostel' | 'day_scholar'>('hostel');
-  const [hostelBlock, setHostelBlock] = useState('Hostel Block A');
-  const [pickupPoint, setPickupPoint] = useState('Boys’ Hostel Area');
+  const [hostelBlock, setHostelBlock] = useState('Ananda Vihar (BH)');
+  const [pickupPoint, setPickupPoint] = useState('Canopy Canteen');
   const [contactPref, setContactPref] = useState('In-app chat only');
   const [availPreset, setAvailPreset] = useState('Weekday evenings');
 
@@ -134,7 +135,7 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
           </div>
         )}
 
-        {/* STEP 2: Profile Setup */}
+        {/* STEP 2: Profile Setup (Progressive 2-Stage Disclosure per Issue #30) */}
         {step === 'profile-setup' && (
           <div className="space-y-6">
             <div className="text-center space-y-1">
@@ -142,112 +143,189 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({
                 Complete Your Campus Profile
               </h2>
               <p className="text-xs sm:text-sm text-neutral-secondary">
-                Set your campus location so peers know where to deliver.
+                {profileStage === 1
+                  ? 'Step 1 of 2: Set your student identity and residential block.'
+                  : 'Step 2 of 2: Review your pickup spot and confirm profile defaults.'}
               </p>
             </div>
 
-            <div className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Full Student Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Student Category
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setUserType('hostel')}
-                    className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                      userType === 'hostel'
-                        ? 'bg-brand-indigo text-white border-brand-indigo'
-                        : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300'
-                    }`}
-                  >
-                    Hostel Resident
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUserType('day_scholar')}
-                    className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                      userType === 'day_scholar'
-                        ? 'bg-brand-indigo text-white border-brand-indigo'
-                        : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300'
-                    }`}
-                  >
-                    Day Scholar Commuter
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Hostel Block or Department Building
-                </label>
-                <input
-                  type="text"
-                  value={hostelBlock}
-                  onChange={(e) => setHostelBlock(e.target.value)}
-                  className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
-                  Default Public Campus Pickup Point
-                </label>
-                <select
-                  value={pickupPoint}
-                  onChange={(e) => setPickupPoint(e.target.value)}
-                  className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo"
-                >
-                  {campusPickupPoints.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Helper Extra: Availability & Preferences */}
-              <div className="pt-2 border-t border-neutral-border dark:border-slate-800 space-y-2">
-                <span className="block text-xs font-semibold text-brand-teal uppercase tracking-wider">
-                  Helper Preferences (If delivering)
-                </span>
-                <div>
-                  <label className="block text-xs text-neutral-secondary mb-1">
-                    When are you usually stepping out to shops?
-                  </label>
-                  <select
-                    value={availPreset}
-                    onChange={(e) => setAvailPreset(e.target.value)}
-                    className="w-full h-10 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs"
-                  >
-                    <option>Weekday evenings (6 PM – 9 PM)</option>
-                    <option>Weekend afternoons (12 PM – 4 PM)</option>
-                    <option>Late night study breaks (10 PM – 12 AM)</option>
-                    <option>Morning lecture commutes (8 AM – 10 AM)</option>
-                  </select>
-                </div>
-              </div>
+            {/* Stage Progress Pills */}
+            <div className="flex gap-2">
+              <div
+                className={`h-1.5 flex-1 rounded-full transition-colors ${
+                  profileStage >= 1 ? 'bg-brand-indigo' : 'bg-neutral-surface-alt dark:bg-slate-700'
+                }`}
+              />
+              <div
+                className={`h-1.5 flex-1 rounded-full transition-colors ${
+                  profileStage === 2 ? 'bg-brand-indigo' : 'bg-neutral-surface-alt dark:bg-slate-700'
+                }`}
+              />
             </div>
 
-            <button
-              onClick={() => onNavigate('/app/policy')}
-              className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-medium text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              <span>Save & Continue</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {/* Progressive Stage 1: Identity & Residence */}
+            {profileStage === 1 && (
+              <div className="space-y-4 text-sm animate-fade-in">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                    Full Student Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your student name"
+                    className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-indigo font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                    Student Category *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setUserType('hostel')}
+                      className={`py-2.5 px-3 text-xs font-semibold rounded-lg border transition-all ${
+                        userType === 'hostel'
+                          ? 'bg-brand-indigo text-white border-brand-indigo shadow-sm'
+                          : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                      }`}
+                    >
+                      Hostel Resident
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserType('day_scholar')}
+                      className={`py-2.5 px-3 text-xs font-semibold rounded-lg border transition-all ${
+                        userType === 'day_scholar'
+                          ? 'bg-brand-indigo text-white border-brand-indigo shadow-sm'
+                          : 'border-neutral-border dark:border-slate-700 text-neutral-body dark:text-slate-300 hover:bg-neutral-surface-alt'
+                      }`}
+                    >
+                      Day Scholar Commuter
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1.5">
+                    Hostel Block / Building Area *
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {['Ananda Vihar (BH)', 'Sandipani (BH)', 'Vaidehi (GH)', 'VK (GH)', 'Day Scholar Commuter'].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setHostelBlock(h)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                          hostelBlock === h
+                            ? 'bg-indigo-50 border-brand-indigo text-brand-indigo dark:bg-indigo-950 dark:text-indigo-200 font-bold'
+                            : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:bg-neutral-surface-alt'
+                        }`}
+                      >
+                        {h}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={hostelBlock}
+                    onChange={(e) => setHostelBlock(e.target.value)}
+                    placeholder="e.g., Ananda Vihar Block A"
+                    className="w-full h-10 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-brand-indigo font-medium"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setProfileStage(2)}
+                  disabled={!name.trim() || !hostelBlock.trim()}
+                  className="w-full h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  <span>Continue to Pickup Point</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Progressive Stage 2: Pickup Point & Summary Card */}
+            {profileStage === 2 && (
+              <div className="space-y-4 text-sm animate-fade-in">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-ink dark:text-neutral-dark-text mb-1">
+                    Default Campus Meeting Point *
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {['Canopy Canteen', 'Central Library Circle', 'KC Food Court', 'Main Gate'].map((pt) => (
+                      <button
+                        key={pt}
+                        type="button"
+                        onClick={() => setPickupPoint(pt)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                          pickupPoint === pt
+                            ? 'bg-teal-50 border-brand-teal text-brand-teal dark:bg-teal-950 dark:text-teal-200 font-bold'
+                            : 'border-neutral-border dark:border-slate-700 text-neutral-secondary hover:bg-neutral-surface-alt'
+                        }`}
+                      >
+                        {pt}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={pickupPoint}
+                    onChange={(e) => setPickupPoint(e.target.value)}
+                    className="w-full h-11 px-3 rounded-input bg-neutral-surface-alt dark:bg-slate-800 border border-neutral-border dark:border-slate-700 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-indigo"
+                  >
+                    {campusPickupPoints.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Final Profile Summary Card (Issue #30 Requirement) */}
+                <div className="p-4 rounded-xl bg-neutral-surface-alt/70 dark:bg-slate-800/60 border border-neutral-border dark:border-slate-700 space-y-2 text-xs">
+                  <span className="text-[10px] uppercase font-bold text-neutral-secondary block tracking-wider">
+                    Profile Summary Preview
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-neutral-ink dark:text-neutral-dark-text">
+                    <div>
+                      <span className="text-[10px] text-neutral-secondary block">Student Name</span>
+                      <strong className="block">{name}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-neutral-secondary block">Residence Area</span>
+                      <strong className="block">{hostelBlock}</strong>
+                    </div>
+                    <div className="col-span-2 pt-1 border-t border-neutral-border/50 dark:border-slate-700">
+                      <span className="text-[10px] text-neutral-secondary block">Primary Meeting Spot</span>
+                      <strong className="text-brand-indigo font-bold">{pickupPoint}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProfileStage(1)}
+                    className="h-12 px-4 rounded-btn border border-neutral-border dark:border-slate-700 text-xs font-semibold text-neutral-secondary hover:text-neutral-ink flex items-center justify-center gap-1.5"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('/app/policy')}
+                    className="flex-1 h-12 rounded-btn bg-brand-indigo hover:bg-brand-indigo-dark text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <span>Save Profile & Continue</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
