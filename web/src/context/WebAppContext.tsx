@@ -22,6 +22,10 @@ interface WebAppContextType {
     isVerified: boolean;
     upiId?: string;
     isStaff: boolean;
+    ratingAverage?: number;
+    ratingCount?: number;
+    completedOrdersCount?: number;
+    problemCount?: number;
   };
   isSuperAdmin: boolean;
   login: (email: string, password: string) => Promise<UserRole>;
@@ -63,6 +67,10 @@ const DEFAULT_USERS = {
     pickupPoint: '',
     isVerified: false,
     isStaff: false,
+    ratingAverage: 5.0,
+    ratingCount: 0,
+    completedOrdersCount: 0,
+    problemCount: 0,
   },
 };
 
@@ -217,6 +225,17 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [refreshNotifications]);
 
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshOrders();
+        void refreshNotifications();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [refreshOrders, refreshNotifications]);
+
   // The backend owns identity: password check, token issue, role assignment.
   // The UI only resolves which portal to show from the user the API returns.
   const applyUser = (user: any): UserRole => {
@@ -234,6 +253,10 @@ export const WebAppProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isVerified: !!user.is_verified_student,
       upiId: user.upi_id || '',
       isStaff: !!user.is_staff,
+      ratingAverage: typeof user.rating_average === 'number' ? user.rating_average : (user.ratingAverage ?? 5.0),
+      ratingCount: typeof user.rating_count === 'number' ? user.rating_count : (user.ratingCount ?? 0),
+      completedOrdersCount: typeof user.completed_orders_count === 'number' ? user.completed_orders_count : (user.completedOrdersCount ?? 0),
+      problemCount: typeof user.problem_count === 'number' ? user.problem_count : (user.problemCount ?? 0),
     });
     return resolved;
   };

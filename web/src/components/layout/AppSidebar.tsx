@@ -50,6 +50,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     { label: 'Customer Home', path: '/app/home', icon: Home },
     { label: 'Post a Request', path: '/app/post', icon: PlusCircle, isHighlight: true },
     { label: 'My Orders', path: '/app/orders', icon: Package },
+    { label: 'Order Messages & Chat', path: '/app/chat', icon: MessageSquare, isHighlight: true },
     { label: 'Order History', path: '/app/history', icon: Clock },
     { label: 'Profile Settings', path: '/app/profile', icon: User },
     { label: 'Report a Problem', path: '/app/report', icon: ShieldAlert },
@@ -58,6 +59,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const helperItems: SidebarItem[] = [
     { label: 'Request Feed', path: '/app/helper/feed', icon: Compass },
     { label: 'My Delivery Jobs', path: '/app/helper/jobs', icon: Briefcase },
+    { label: 'Order Messages & Chat', path: '/app/chat', icon: MessageSquare, isHighlight: true },
     { label: 'Going Out Times', path: '/app/helper/availability', icon: Calendar },
     { label: 'Profile Settings', path: '/app/profile', icon: User },
     { label: 'Report a Problem', path: '/app/report', icon: ShieldAlert },
